@@ -27,7 +27,7 @@ const server = http.createServer(app);
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname, "../public")));
 
 // ─────────────────────────────────────────
 //  WEBSOCKET SERVERS
@@ -110,7 +110,8 @@ bridgeWss.on("connection", (ws, req) => {
       case "CLOSE_ALL_RESULT":
       case "SETTINGS_ACK":
       case "SETTINGS":
-      case "TRADE_RESULT":
+      case "SQUEEZE_ALERT":
+      case "POSITIONS_UPDATE":
         // Forward result back to dashboards
         broadcastDash({ type, payload });
         // Resolve pending promise if any
@@ -181,7 +182,7 @@ app.get("/api/bridge-status", (req, res) => {
 
 // Serve dashboard for all other routes (SPA)
 app.get("*", (req, res) => {
- res.sendFile(path.join(__dirname, "public/index.html"));
+  res.sendFile(path.join(__dirname, "../public/index.html"));
 });
 
 // ─────────────────────────────────────────
