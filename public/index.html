@@ -67,6 +67,32 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100dv
 .ticker{font-size:10px;color:var(--text3);padding:6px 16px;border-top:0.5px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:6px}
 .ticker-dot{width:5px;height:5px;border-radius:50%;background:var(--text3);transition:background .3s}
 .ticker-dot.live{background:var(--green)}
+/* ── ACCOUNT MODAL ───────────────────── */
+.modal-overlay{display:none;position:fixed;inset:0;background:#00000088;z-index:400;align-items:center;justify-content:center;padding:16px}
+.modal-overlay.open{display:flex}
+.modal{background:var(--bg2);border:0.5px solid var(--border2);border-radius:var(--rl);width:100%;max-width:380px;overflow:hidden}
+.modal-head{padding:14px 16px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-title{font-size:14px;font-weight:500}
+.modal-close{width:28px;height:28px;border-radius:50%;background:var(--bg3);border:none;color:var(--text2);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.modal-body{padding:16px}
+.acct-option{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--r);border:0.5px solid var(--border);background:var(--bg3);margin-bottom:8px;cursor:pointer;transition:all .15s}
+.acct-option:hover{border-color:var(--blue-bd)}
+.acct-option.active{border-color:var(--blue-bd);background:var(--blue-bg)}
+.acct-option:last-child{margin-bottom:0}
+.acct-opt-icon{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.acct-opt-icon.demo{background:var(--blue-bg);color:var(--blue)}
+.acct-opt-icon.real{background:var(--green-bg);color:var(--green)}
+.acct-opt-id{font-size:13px;font-weight:500;color:var(--text)}
+.acct-opt-type{font-size:11px;color:var(--text3)}
+.acct-opt-check{margin-left:auto;color:var(--blue);font-size:16px}
+.modal-divider{height:0.5px;background:var(--border);margin:14px 0}
+.token-input{width:100%;padding:9px 12px;border-radius:var(--r);border:0.5px solid var(--border2);background:var(--bg3);color:var(--text);font-size:13px;font-family:var(--font);margin-bottom:8px}
+.token-input:focus{outline:none;border-color:var(--blue-bd)}
+.login-btn{width:100%;padding:10px;border-radius:var(--r);border:none;background:var(--blue);color:#fff;font-size:13px;font-weight:500;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:6px}
+.logout-btn{width:100%;padding:9px;border-radius:var(--r);border:0.5px solid var(--red-bd);background:transparent;color:var(--red);font-size:13px;cursor:pointer;font-family:var(--font);margin-top:8px;display:flex;align-items:center;justify-content:center;gap:6px}
+.acct-switcher-btn{display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:6px;border:0.5px solid var(--border);background:transparent;color:var(--text2);font-size:11px;cursor:pointer;font-family:var(--font);margin-top:8px}
+.acct-switcher-btn:hover{border-color:var(--blue-bd);color:var(--blue)}
+
 
 /* ── MAIN area ───────────────────────── */
 .main{display:flex;flex-direction:column;overflow:hidden}
@@ -235,9 +261,12 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100dv
       <div style="font-size:10px;color:var(--text3)">v2.02</div>
     </div>
   </div>
-  <div class="mob-status">
+  <div class="mob-status" style="display:flex;align-items:center;gap:8px">
+    <button class="acct-switcher-btn" onclick="openAccountModal()" style="margin-top:0">
+      <i class="ti ti-user-circle"></i>
+      <span id="current-acct-label-mob">—</span>
+    </button>
     <div class="bdot" id="bdot-mob"></div>
-    <span style="font-size:11px;color:var(--text2)" id="blabel-mob">Connecting…</span>
   </div>
 </div>
 
@@ -254,6 +283,11 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100dv
         <div class="bdot" id="bdot"></div>
         <span class="blabel" id="blabel">Connecting…</span>
       </div>
+      <button class="acct-switcher-btn" onclick="openAccountModal()">
+        <i class="ti ti-user-circle"></i>
+        <span id="current-acct-label">No account</span>
+        <i class="ti ti-chevron-down" style="margin-left:auto"></i>
+      </button>
     </div>
     <div class="sb-acct">
       <div class="acct-grid">
@@ -445,6 +479,30 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100dv
   </div>
 </div>
 
+
+<!-- ACCOUNT MODAL -->
+<div class="modal-overlay" id="acct-modal" onclick="closeAccountModal(event)">
+  <div class="modal">
+    <div class="modal-head">
+      <span class="modal-title">Accounts</span>
+      <button class="modal-close" onclick="closeAccountModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="acct-options">
+        <div style="font-size:12px;color:var(--text3);text-align:center;padding:16px 0">Loading accounts…</div>
+      </div>
+      <div class="modal-divider"></div>
+      <div style="font-size:10px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Log in with new token</div>
+      <input class="token-input" type="password" id="new-token-input" placeholder="Paste your PAT token (pat_...)">
+      <button class="login-btn" onclick="loginNewToken()">
+        <i class="ti ti-login"></i> Log in
+      </button>
+      <button class="logout-btn" onclick="logout()">
+        <i class="ti ti-logout"></i> Log out
+      </button>
+    </div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -484,6 +542,24 @@ function handle({type,payload}){
     case 'SETTINGS_ACK':     applySettings(payload); toast('Settings saved','ok'); break;
     case 'SETTINGS':         applySettings(payload); break;
     case 'ERROR':            toast(payload.message,'err'); break;
+    case 'ACCOUNTS_LIST':
+      allAccounts=payload.accounts||[];
+      currentAccountId=payload.current||currentAccountId;
+      updateAccountLabel(currentAccountId);
+      renderAccountOptions();
+      break;
+    case 'ACCOUNT_SWITCHED':
+      currentAccountId=payload.account_id;
+      updateAccountLabel(currentAccountId);
+      renderAccountOptions();
+      toast('Switched to '+payload.account_id,'ok');
+      break;
+    case 'LOGGED_OUT':
+      currentAccountId=null;
+      allAccounts=[];
+      updateAccountLabel(null);
+      renderAccountOptions();
+      break;
   }
 }
 
@@ -726,6 +802,67 @@ function toast(msg,type=''){
   t.textContent=msg;
   t.className='toast '+(type==='ok'?'ok':type==='err'?'err':'')+' show';
   setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+
+// ── ACCOUNTS ──────────────────────────────
+let allAccounts=[], currentAccountId=null;
+
+function openAccountModal(){
+  document.getElementById('acct-modal').classList.add('open');
+  send('GET_ACCOUNTS',{});
+}
+function closeAccountModal(e){
+  if(!e||e.target===document.getElementById('acct-modal'))
+    document.getElementById('acct-modal').classList.remove('open');
+}
+function renderAccountOptions(){
+  const el=document.getElementById('acct-options');
+  if(!allAccounts.length){
+    el.innerHTML='<div style="font-size:12px;color:var(--text3);text-align:center;padding:16px 0">No accounts found</div>';
+    return;
+  }
+  el.innerHTML=allAccounts.map(a=>`
+    <div class="acct-option${a.id===currentAccountId?' active':''}" onclick="switchAccount('${a.id}')">
+      <div class="acct-opt-icon ${a.type}">
+        <i class="ti ti-${a.type==='demo'?'test-pipe':'currency-dollar'}"></i>
+      </div>
+      <div>
+        <div class="acct-opt-id">${a.id}</div>
+        <div class="acct-opt-type">${a.type==='demo'?'Demo account':'Real account'} · ${a.currency}</div>
+      </div>
+      ${a.id===currentAccountId?'<i class="ti ti-check acct-opt-check"></i>':''}
+    </div>`).join('');
+}
+function switchAccount(id){
+  if(id===currentAccountId) return;
+  send('SWITCH_ACCOUNT',{account_id:id});
+  toast('Switching to '+id+'…');
+  closeAccountModal();
+}
+function loginNewToken(){
+  const token=document.getElementById('new-token-input').value.trim();
+  if(!token){ toast('Paste a token first','err'); return; }
+  send('LOGIN_TOKEN',{token});
+  document.getElementById('new-token-input').value='';
+  toast('Logging in…');
+  closeAccountModal();
+}
+function logout(){
+  if(!confirm('Log out of current account?')) return;
+  send('LOGOUT',{});
+  closeAccountModal();
+  toast('Logged out');
+}
+function updateAccountLabel(id){
+  currentAccountId=id;
+  const acct=allAccounts.find(a=>a.id===id);
+  const label=id?(acct?`${id} (${acct.type})`:`${id}`):'No account';
+  const shortLabel=id?id:'—';
+  const el=document.getElementById('current-acct-label');
+  const elm=document.getElementById('current-acct-label-mob');
+  if(el) el.textContent=label;
+  if(elm) elm.textContent=shortLabel;
 }
 
 connect();
