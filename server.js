@@ -450,7 +450,7 @@ function handleTradingMsg(msg) {
         lot:           1,
         open_price:    parseFloat(c.buy_price||0).toFixed(4),
         current_price: parseFloat(c.current_spot||c.buy_price||0).toFixed(4),
-        pnl:           parseFloat((c.profit||0).toFixed(2)),
+        pnl: parseFloat(parseFloat(c.profit||0).toFixed(2)),
       };
       if (idx !== -1) {
         positionsState[idx]=pos; // update existing
