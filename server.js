@@ -79,7 +79,7 @@ let EA = {
 
   // Multiplier trade defaults
   stake:2.00,          // USD amount staked per trade
-  multiplier:10,       // e.g. 10, 20, 50, 100, 150, 200, 250, 300, 500
+  multiplier:50,       // accepted: 50, 100, 200, 300, 500
   take_profit:0,       // 0 = disabled; set USD amount to enable TP
   stop_loss:2.00,      // USD amount; set to stake to cap loss at stake
 
@@ -88,6 +88,26 @@ let EA = {
   cooldown_watch:300, cooldown_ready:120, cooldown_signal:300,
   ea_running:true,
 };
+
+// ─────────────────────────────────────────
+//  PER-SYMBOL MULTIPLIER STORE
+//  Populated at startup via contracts_for WS call.
+//  Stores { min, available: [] } for each symbol.
+// ─────────────────────────────────────────
+const SYM_MULTIPLIERS = {};
+SYMBOLS.forEach(s => SYM_MULTIPLIERS[s] = { min: 50, available: [] });
+
+function fetchContractsFor(ws) {
+  for (const sym of SYMBOLS) {
+    ws.send(JSON.stringify({
+      contracts_for   : sym,
+      currency        : "USD",
+      landing_company : "svg",
+      product_type    : "basic",
+      req_id          : reqId++,
+    }));
+  }
+}
 
 // ─────────────────────────────────────────
 //  CANDLE STORE
@@ -326,7 +346,8 @@ function connectPublicWs() {
   publicWs=new WebSocket(PUBLIC_WS_URL);
 
   publicWs.on("open",()=>{
-    console.log("[DERIV] Public WS open — subscribing candles…");
+    console.log("[DERIV] Public WS open — subscribing candles + fetching contract specs…");
+    fetchContractsFor(publicWs);
     for (const sym of SYMBOLS) {
       publicWs.send(JSON.stringify({
         ticks_history:sym, granularity:60, count:BARS_NEEDED,
@@ -371,11 +392,22 @@ function handleMarketData(msg) {
         candles[sym][0]=bar;
       else { candles[sym].unshift(bar); if(candles[sym].length>BARS_NEEDED) candles[sym].pop(); }
     }
+  } else if (type === "contracts_for") {
+    const sym = msg.echo_req?.contracts_for;
+    if (!sym || !SYM_MULTIPLIERS[sym]) return;
+    const contracts = msg.contracts_for?.available || [];
+    const multContracts = contracts.filter(c =>
+      c.contract_type === "MULTUP" || c.contract_type === "MULTDOWN"
+    );
+    const allMults = [...new Set(
+      multContracts.flatMap(c => c.multiplier_range || [])
+    )].sort((a, b) => a - b);
+    if (allMults.length) {
+      SYM_MULTIPLIERS[sym] = { min: allMults[0], available: allMults };
+      console.log(`[CONTRACTS] ${sym} multipliers: [${allMults.join(", ")}] — min=${allMults[0]}`);
+      broadcastDash({ type: "SYM_MULTIPLIERS", payload: SYM_MULTIPLIERS });
+    }
   }
-}
-
-// ─────────────────────────────────────────
-//  TRADING WS  (authenticated)
 // ─────────────────────────────────────────
 async function connectTradingWs() {
   if (!DERIV_TOKEN) { console.warn("[DERIV] No token — market data only"); return; }
@@ -632,8 +664,16 @@ function fireTrade({symbol, direction, stake, multiplier, take_profit, stop_loss
 
   // Resolve symbol: accept display name or raw code
   const sym            = NAME_TO_SYM[symbol] || symbol;
-  const amount         = n(stake)      || EA.stake;
-  const mult           = parseInt(multiplier||EA.multiplier) || 10;
+  const amount         = n(stake) || EA.stake;
+
+  // Use per-symbol minimum multiplier if caller didn't specify one,
+  // or if the specified value isn't in the accepted range for this symbol.
+  const symMults       = SYM_MULTIPLIERS[sym];
+  const requestedMult  = parseInt(multiplier || EA.multiplier) || 0;
+  const mult           = (symMults?.available?.includes(requestedMult))
+                           ? requestedMult
+                           : (symMults?.min || 50);
+
   const currency       = accountState?.currency || "USD";
 
   // MULTUP = Long (Buy), MULTDOWN = Short (Sell)
