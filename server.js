@@ -91,22 +91,77 @@ let EA = {
 
 // ─────────────────────────────────────────
 //  PER-SYMBOL MULTIPLIER STORE
-//  Populated at startup via contracts_for WS call.
-//  Stores { min, available: [] } for each symbol.
+//  Populated at runtime via contracts_for calls on the trading WS.
+//  Each entry: { min, available: [50, 100, 200, ...] }
+//  Falls back to [50] until Deriv responds.
 // ─────────────────────────────────────────
 const SYM_MULTIPLIERS = {};
 SYMBOLS.forEach(s => SYM_MULTIPLIERS[s] = { min: 50, available: [] });
 
+let contractsFetched = false;
+
 function fetchContractsFor(ws) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  console.log("[CONTRACTS] Fetching multiplier ranges for all symbols…");
   for (const sym of SYMBOLS) {
+    const id = reqId++;
+    pendingCallbacks[id] = (msg) => handleContractsFor(msg, sym);
     ws.send(JSON.stringify({
       contracts_for   : sym,
       currency        : "USD",
       landing_company : "svg",
       product_type    : "basic",
-      req_id          : reqId++,
+      req_id          : id,
     }));
   }
+}
+
+function handleContractsFor(msg, sym) {
+  if (msg.error) {
+    console.warn(`[CONTRACTS] ${sym} error: ${msg.error.message}`);
+    return;
+  }
+  const available = msg.contracts_for?.available || [];
+  const multContracts = available.filter(c =>
+    c.contract_type === "MULTUP" || c.contract_type === "MULTDOWN"
+  );
+  const allMults = [...new Set(
+    multContracts.flatMap(c => c.multiplier_range || [])
+  )].map(Number).filter(Boolean).sort((a, b) => a - b);
+
+  if (allMults.length) {
+    SYM_MULTIPLIERS[sym] = { min: allMults[0], available: allMults };
+    console.log(`[CONTRACTS] ${sym} → multipliers: [${allMults.join(", ")}]`);
+  } else {
+    // Symbol returned no multiplier contracts — keep fallback
+    console.warn(`[CONTRACTS] ${sym} → no MULTUP/MULTDOWN contracts found, keeping fallback`);
+  }
+
+  // Check if all symbols are resolved
+  const done = SYMBOLS.every(s => SYM_MULTIPLIERS[s].available.length > 0);
+  if (done && !contractsFetched) {
+    contractsFetched = true;
+    console.log("[CONTRACTS] All symbol multipliers loaded ✓");
+    broadcastDash({ type: "SYM_MULTIPLIERS", payload: SYM_MULTIPLIERS });
+  }
+}
+
+// Resolve the best multiplier for a symbol:
+//   - If caller passed a value and it's valid for this symbol → use it
+//   - Otherwise → use the symbol's minimum (lowest accepted value)
+//   - If symbol data not yet loaded → use EA.multiplier as temporary fallback
+function resolveMultiplier(sym, requested) {
+  const data = SYM_MULTIPLIERS[sym];
+  const req  = parseInt(requested) || 0;
+
+  if (data?.available?.length) {
+    // Use requested if valid, else fall back to symbol minimum
+    return data.available.includes(req) ? req : data.min;
+  }
+
+  // Data not yet fetched — use EA default and warn
+  console.warn(`[CONTRACTS] ${sym} multiplier data not yet loaded, using EA default ${EA.multiplier}`);
+  return parseInt(EA.multiplier) || 50;
 }
 
 // ─────────────────────────────────────────
@@ -346,8 +401,7 @@ function connectPublicWs() {
   publicWs=new WebSocket(PUBLIC_WS_URL);
 
   publicWs.on("open",()=>{
-    console.log("[DERIV] Public WS open — subscribing candles + fetching contract specs…");
-    fetchContractsFor(publicWs);
+    console.log("[DERIV] Public WS open — subscribing candles…");
     for (const sym of SYMBOLS) {
       publicWs.send(JSON.stringify({
         ticks_history:sym, granularity:60, count:BARS_NEEDED,
@@ -392,21 +446,6 @@ function handleMarketData(msg) {
         candles[sym][0]=bar;
       else { candles[sym].unshift(bar); if(candles[sym].length>BARS_NEEDED) candles[sym].pop(); }
     }
-  } else if (type === "contracts_for") {
-    const sym = msg.echo_req?.contracts_for;
-    if (!sym || !SYM_MULTIPLIERS[sym]) return;
-    const contracts = msg.contracts_for?.available || [];
-    const multContracts = contracts.filter(c =>
-      c.contract_type === "MULTUP" || c.contract_type === "MULTDOWN"
-    );
-    const allMults = [...new Set(
-      multContracts.flatMap(c => c.multiplier_range || [])
-    )].sort((a, b) => a - b);
-    if (allMults.length) {
-      SYM_MULTIPLIERS[sym] = { min: allMults[0], available: allMults };
-      console.log(`[CONTRACTS] ${sym} multipliers: [${allMults.join(", ")}] — min=${allMults[0]}`);
-      broadcastDash({ type: "SYM_MULTIPLIERS", payload: SYM_MULTIPLIERS });
-    }
   }
 }
 
@@ -432,6 +471,8 @@ async function connectTradingWs() {
       tradingWs.send(JSON.stringify({portfolio:1, req_id:reqId++}));
       // Global subscription to all open contract updates (new API: no loginid)
       tradingWs.send(JSON.stringify({proposal_open_contract:1, subscribe:1, req_id:reqId++}));
+      // Fetch valid multiplier ranges for every symbol
+      fetchContractsFor(tradingWs);
     });
 
     tradingWs.on("message",raw=>{
@@ -674,10 +715,7 @@ function fireTrade({symbol, direction, stake, multiplier, take_profit, stop_loss
   // or if the specified value isn't in the accepted range for this symbol.
   const symMults       = SYM_MULTIPLIERS[sym];
   const requestedMult  = parseInt(multiplier || EA.multiplier) || 0;
-  const mult           = (symMults?.available?.includes(requestedMult))
-                           ? requestedMult
-                           : (symMults?.min || 50);
-
+  const mult           = resolveMultiplier(sym, multiplier || EA.multiplier);
   const currency       = accountState?.currency || "USD";
 
   // MULTUP = Long (Buy), MULTDOWN = Short (Sell)
