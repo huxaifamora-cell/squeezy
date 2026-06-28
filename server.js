@@ -245,10 +245,17 @@ async function getAccounts() {
   }
   const accounts=data.data||[];
   console.log("[DERIV] Accounts found:",accounts.map(a=>a.account_id||a.id).join(", "));
-  // prefer demo account
-  const demo=accounts.find(a=>(a.account_type||"").toLowerCase().includes("demo")||
-                                (a.account_id||"").startsWith("VR"));
-  return (demo||accounts[0])?.account_id || (demo||accounts[0])?.id || null;
+  console.log("[DERIV] Full account data:",JSON.stringify(accounts));
+  // prefer demo — new Deriv API uses DOT prefix for demo, ROT for real
+  const demo=accounts.find(a=>{
+    const id=(a.account_id||a.id||"");
+    const type=(a.account_type||a.type||"").toLowerCase();
+    return id.startsWith("DOT")||id.startsWith("VR")||type.includes("demo")||type.includes("virtual");
+  });
+  const chosen=demo||accounts[0];
+  const chosenId=chosen?.account_id||chosen?.id||null;
+  console.log("[DERIV] Using account:",chosenId,(demo?"(demo)":"(first available — may be real account)"));
+  return chosenId;
 }
 
 async function getOTP(accountId) {
