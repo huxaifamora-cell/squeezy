@@ -23,7 +23,7 @@ const cors     = require("cors");
 const path     = require("path");
 
 const PORT             = process.env.PORT             || 3000;
-const DERIV_TOKEN      = process.env.DERIV_TOKEN      || "";
+let   DERIV_TOKEN      = process.env.DERIV_TOKEN      || "";
 const DERIV_APP_ID     = process.env.DERIV_APP_ID     || "33FPKmmaz5Yxy6DuhhyVt";
 const DERIV_CLIENT_ID  = process.env.DERIV_CLIENT_ID  || "019eb390-b034-7ab0-860c-526190c7c3e6";
 const DERIV_REST_BASE  = "https://api.derivws.com";
@@ -214,7 +214,7 @@ function scanAll() {
 // ─────────────────────────────────────────
 //  STATE
 // ─────────────────────────────────────────
-let accountState=null, positionsState=[], derivAccountId=null;
+let accountState=null, positionsState=[], derivAccountId=null, allAccounts=[];
 let tradingWs=null, tradingWsReady=false;
 let reqId=1;
 const pending={};
@@ -245,8 +245,15 @@ async function getAccounts() {
   }
   const accounts=data.data||[];
   console.log("[DERIV] Accounts found:",accounts.map(a=>a.account_id||a.id).join(", "));
-  console.log("[DERIV] Full account data:",JSON.stringify(accounts));
-  // prefer demo — new Deriv API uses DOT prefix for demo, ROT for real
+  // store all accounts for switcher
+  allAccounts=accounts.map(a=>({
+    id:    a.account_id||a.id,
+    type:  (a.account_id||a.id||"").startsWith("DOT")||(a.account_type||"").toLowerCase().includes("demo")?"demo":"real",
+    currency: a.currency||"USD",
+    label: a.account_id||a.id,
+  }));
+  broadcastDash({type:"ACCOUNTS_LIST",payload:{accounts:allAccounts, current:derivAccountId}});
+  // prefer demo — DOT=demo, ROT=real
   const demo=accounts.find(a=>{
     const id=(a.account_id||a.id||"");
     const type=(a.account_type||a.type||"").toLowerCase();
@@ -254,7 +261,7 @@ async function getAccounts() {
   });
   const chosen=demo||accounts[0];
   const chosenId=chosen?.account_id||chosen?.id||null;
-  console.log("[DERIV] Using account:",chosenId,(demo?"(demo)":"(first available — may be real account)"));
+  console.log("[DERIV] Using account:",chosenId,(demo?"(demo)":"(first available)"));
   return chosenId;
 }
 
@@ -492,6 +499,7 @@ dashWss.on("connection",ws=>{
   if (accountState) ws.send(JSON.stringify({type:"STATE_UPDATE",payload:{
     account:accountState, positions:positionsState, settings:EA, sym_states:[],
   }}));
+  if (allAccounts.length) ws.send(JSON.stringify({type:"ACCOUNTS_LIST",payload:{accounts:allAccounts,current:derivAccountId}}));
 
   ws.on("message",raw=>{
     let msg; try{msg=JSON.parse(raw);}catch{return;}
@@ -504,7 +512,54 @@ dashWss.on("connection",ws=>{
       case "CLOSE_POSITION": closePosition(payload.ticket); break;
       case "CLOSE_ALL":      closeAll(); break;
       case "UPDATE_SETTINGS": Object.assign(EA,payload); broadcastDash({type:"SETTINGS_ACK",payload:EA}); break;
-      case "GET_SETTINGS":   ws.send(JSON.stringify({type:"SETTINGS",payload:EA})); break;
+      case "GET_SETTINGS":
+        ws.send(JSON.stringify({type:"SETTINGS",payload:EA}));
+        break;
+
+      case "GET_ACCOUNTS":
+        ws.send(JSON.stringify({type:"ACCOUNTS_LIST",payload:{accounts:allAccounts,current:derivAccountId}}));
+        break;
+
+      case "SWITCH_ACCOUNT":
+        // Switch to a different account (same token)
+        if (!payload.account_id) return;
+        console.log("[DASH] Switch account to:",payload.account_id);
+        derivAccountId = payload.account_id;
+        accountState   = null;
+        positionsState = [];
+        if (tradingWs) tradingWs.close(); // triggers reconnect with new account
+        broadcastDash({type:"BRIDGE_STATUS",payload:{connected:false}});
+        broadcastDash({type:"ACCOUNT_SWITCHED",payload:{account_id:payload.account_id}});
+        setTimeout(connectTradingWs, 1000);
+        break;
+
+      case "LOGIN_TOKEN":
+        // Log in with a new PAT token
+        if (!payload.token) return;
+        console.log("[DASH] New token login requested");
+        DERIV_TOKEN    = payload.token;
+        derivAccountId = null;
+        allAccounts    = [];
+        accountState   = null;
+        positionsState = [];
+        if (tradingWs) tradingWs.close();
+        broadcastDash({type:"BRIDGE_STATUS",payload:{connected:false}});
+        broadcastDash({type:"LOGGED_OUT",payload:{}});
+        setTimeout(connectTradingWs, 1000);
+        break;
+
+      case "LOGOUT":
+        console.log("[DASH] Logout requested");
+        DERIV_TOKEN    = "";
+        derivAccountId = null;
+        allAccounts    = [];
+        accountState   = null;
+        positionsState = [];
+        if (tradingWs) { tradingWs.close(); tradingWs=null; }
+        tradingWsReady = false;
+        broadcastDash({type:"BRIDGE_STATUS",payload:{connected:false}});
+        broadcastDash({type:"LOGGED_OUT",payload:{}});
+        break;
     }
   });
   ws.on("close",()=>console.log("[DASH] Browser disconnected"));
