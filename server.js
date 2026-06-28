@@ -408,6 +408,10 @@ function handleMarketData(msg) {
       broadcastDash({ type: "SYM_MULTIPLIERS", payload: SYM_MULTIPLIERS });
     }
   }
+}
+
+// ─────────────────────────────────────────
+//  TRADING WS  (authenticated)
 // ─────────────────────────────────────────
 async function connectTradingWs() {
   if (!DERIV_TOKEN) { console.warn("[DERIV] No token — market data only"); return; }
