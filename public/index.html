@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Squeezy EA — Dashboard</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#141412;--bg2:#1e1e1c;--bg3:#272724;--bg4:#313130;
-  --border:#ffffff14;--border2:#ffffff22;--border3:#ffffff33;
+  --border:#ffffff14;--border2:#ffffff22;
   --text:#f0ede8;--text2:#b4b2a9;--text3:#77756f;
   --green:#6abf40;--green-bg:#27500a44;--green-bd:#3b6d1166;
   --red:#e05a5a;--red-bg:#791f1f44;--red-bd:#a32d2d66;
@@ -17,39 +17,40 @@
   --amber:#f5a623;--amber-bg:#63380644;--amber-bd:#63380666;
   --r:8px;--rl:12px;
   --font:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --nav-h:56px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
-body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh;overflow:hidden}
-/* layout */
-.layout{display:grid;grid-template-columns:270px 1fr;height:100vh}
-/* sidebar */
+
+body{font-family:var(--font);background:var(--bg);color:var(--text);height:100dvh;overflow:hidden;-webkit-tap-highlight-color:transparent}
+
+/* ── DESKTOP layout ─────────────────── */
+.layout{display:grid;grid-template-columns:270px 1fr;height:100dvh}
+
 .sidebar{background:var(--bg2);border-right:0.5px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
 .sb-head{padding:16px;border-bottom:0.5px solid var(--border);flex-shrink:0}
 .sb-logo{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .sb-icon{width:32px;height:32px;border-radius:8px;background:var(--blue-bg);border:0.5px solid var(--blue-bd);display:flex;align-items:center;justify-content:center;color:var(--blue);font-size:15px}
 .sb-title{font-size:14px;font-weight:500}
 .sb-sub{font-size:11px;color:var(--text3)}
-/* bridge pill */
 .bridge-pill{display:flex;align-items:center;gap:7px;padding:6px 10px;border-radius:6px;background:var(--bg3);border:0.5px solid var(--border)}
 .bdot{width:7px;height:7px;border-radius:50%;background:var(--red);transition:background .3s;flex-shrink:0}
 .bdot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
 .blabel{font-size:11px;color:var(--text2)}
-/* account */
 .sb-acct{padding:12px 16px;border-bottom:0.5px solid var(--border);flex-shrink:0}
 .acct-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .acct-card{background:var(--bg3);border:0.5px solid var(--border);border-radius:var(--r);padding:10px}
 .acct-lbl{font-size:10px;color:var(--text3);margin-bottom:2px}
 .acct-val{font-size:14px;font-weight:500}
 .acct-val.g{color:var(--green)}.acct-val.r{color:var(--red)}
-/* alert feed */
 .sb-feed-title{padding:10px 16px 6px;font-size:10px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;flex-shrink:0}
 .alert-feed{flex:1;overflow-y:auto;padding:0 10px 10px}
 .alert-feed::-webkit-scrollbar{width:3px}
 .alert-feed::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
-.al-item{padding:8px 10px;border-radius:6px;background:var(--bg3);border:0.5px solid var(--border);margin-bottom:6px;cursor:default}
+.al-item{padding:8px 10px;border-radius:6px;background:var(--bg3);border:0.5px solid var(--border);margin-bottom:6px}
 .al-top{display:flex;align-items:center;gap:6px;margin-bottom:4px}
 .al-badge{font-size:10px;font-weight:500;padding:1px 7px;border-radius:10px}
-.al-badge.watch {background:var(--amber-bg);color:var(--amber);border:0.5px solid var(--amber-bd)}
-.al-badge.ready {background:var(--blue-bg);color:var(--blue);border:0.5px solid var(--blue-bd)}
+.al-badge.watch{background:var(--amber-bg);color:var(--amber);border:0.5px solid var(--amber-bd)}
+.al-badge.ready{background:var(--blue-bg);color:var(--blue);border:0.5px solid var(--blue-bd)}
 .al-badge.signal{background:var(--green-bg);color:var(--green);border:0.5px solid var(--green-bd)}
 .al-dir{font-size:10px;font-weight:500;padding:1px 6px;border-radius:10px}
 .al-dir.bull{background:var(--green-bg);color:var(--green)}
@@ -63,124 +64,186 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
 .al-fill.ready{background:var(--blue)}
 .al-fill.signal{background:var(--green)}
 .al-score-txt{font-size:10px;color:var(--text3);min-width:28px;text-align:right}
-/* main */
+.ticker{font-size:10px;color:var(--text3);padding:6px 16px;border-top:0.5px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:6px}
+.ticker-dot{width:5px;height:5px;border-radius:50%;background:var(--text3);transition:background .3s}
+.ticker-dot.live{background:var(--green)}
+
+/* ── MAIN area ───────────────────────── */
 .main{display:flex;flex-direction:column;overflow:hidden}
-.tabs{display:flex;border-bottom:0.5px solid var(--border);background:var(--bg2);flex-shrink:0}
-.tab{padding:12px 18px;font-size:13px;color:var(--text3);cursor:pointer;border:none;background:transparent;border-bottom:2px solid transparent;transition:all .15s;font-family:var(--font);display:flex;align-items:center;gap:6px}
+.tabs{display:flex;border-bottom:0.5px solid var(--border);background:var(--bg2);flex-shrink:0;overflow-x:auto}
+.tabs::-webkit-scrollbar{display:none}
+.tab{padding:12px 16px;font-size:13px;color:var(--text3);cursor:pointer;border:none;background:transparent;border-bottom:2px solid transparent;transition:all .15s;font-family:var(--font);display:flex;align-items:center;gap:5px;white-space:nowrap;flex-shrink:0}
 .tab.active{color:var(--text);border-bottom-color:var(--blue)}
 .tab:hover{color:var(--text2)}
 .tab-count{font-size:10px;background:var(--blue-bg);color:var(--blue);padding:1px 6px;border-radius:10px}
-.tab-body{flex:1;overflow-y:auto;padding:20px}
+.tab-body{flex:1;overflow-y:auto;padding:16px}
 .tab-body::-webkit-scrollbar{width:4px}
 .tab-body::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
 .pane{display:none}.pane.active{display:block}
-/* cards */
-.card{background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--rl);padding:16px;margin-bottom:14px}
-.card-title{font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;display:flex;align-items:center;gap:6px}
-/* trade pane */
-.trade-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-/* symbol scanner table */
+
+/* ── CARDS ───────────────────────────── */
+.card{background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--rl);padding:14px;margin-bottom:12px}
+.card-title{font-size:10px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;display:flex;align-items:center;gap:5px}
+
+/* ── TRADE PANE ──────────────────────── */
+.trade-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.sym-sel{width:100%;padding:8px 10px;border-radius:var(--r);border:0.5px solid var(--border2);background:var(--bg3);color:var(--text);font-size:13px;margin-bottom:10px;font-family:var(--font)}
+.sym-sel:focus{outline:none;border-color:var(--blue-bd)}
+.sq-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.sq-lbl{font-size:11px;color:var(--text3);width:60px}
+.sq-bar{flex:1;height:5px;background:var(--bg4);border-radius:3px;overflow:hidden}
+.sq-fill{height:100%;border-radius:3px;background:var(--blue);transition:width .5s}
+.sq-pct{font-size:12px;font-weight:500;color:var(--blue);min-width:32px;text-align:right}
+.status-pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;padding:3px 10px;border-radius:20px;margin-bottom:10px}
+.pill-watch{background:var(--amber-bg);color:var(--amber);border:0.5px solid var(--amber-bd)}
+.pill-ready{background:var(--blue-bg);color:var(--blue);border:0.5px solid var(--blue-bd)}
+.pill-signal{background:var(--green-bg);color:var(--green);border:0.5px solid var(--green-bd)}
+.pdot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.dir-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+.dir-btn{padding:9px;border-radius:var(--r);border:0.5px solid var(--border2);background:var(--bg3);color:var(--text2);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;transition:all .15s;font-family:var(--font);-webkit-tap-highlight-color:transparent}
+.dir-btn.buy.active{background:var(--green-bg);border-color:var(--green-bd);color:var(--green)}
+.dir-btn.sell.active{background:var(--red-bg);border-color:var(--red-bd);color:var(--red)}
+.fg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:11px;color:var(--text3)}
+.field input,.setting-input{border:0.5px solid var(--border2);border-radius:var(--r);padding:7px 10px;font-size:13px;background:var(--bg3);color:var(--text);font-family:var(--font);-webkit-appearance:none}
+.field input:focus,.setting-input:focus{outline:none;border-color:var(--blue-bd)}
+.fire-btn{width:100%;padding:12px;border-radius:var(--r);border:none;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .15s;font-family:var(--font);-webkit-tap-highlight-color:transparent}
+.fire-btn.buy{background:var(--green);color:#111}
+.fire-btn.sell{background:var(--red);color:#fff}
+.fire-btn:active{transform:scale(.97)}
+.fire-btn:disabled{opacity:.35;cursor:not-allowed}
+
+/* ── SCANNER ─────────────────────────── */
 .scanner-table{width:100%;border-collapse:collapse}
 .scanner-table th{font-size:10px;color:var(--text3);font-weight:500;padding:6px 8px;text-align:left;border-bottom:0.5px solid var(--border);text-transform:uppercase;letter-spacing:.05em}
 .scanner-table td{padding:7px 8px;font-size:12px;border-bottom:0.5px solid var(--border)}
 .scanner-table tr:last-child td{border-bottom:none}
-.scanner-table tr:hover td{background:var(--bg3)}
-.sym-name{color:var(--text2);max-width:160px}
-.sq-mini{display:flex;align-items:center;gap:6px}
-.sq-mini-bar{width:60px;height:4px;background:var(--bg4);border-radius:2px;overflow:hidden}
+.scanner-table tr:active td{background:var(--bg3)}
+.sym-name{color:var(--text2)}
+.sq-mini{display:flex;align-items:center;gap:4px}
+.sq-mini-bar{width:48px;height:4px;background:var(--bg4);border-radius:2px;overflow:hidden}
 .sq-mini-fill{height:100%;border-radius:2px;background:var(--blue);transition:width .5s}
-.dir-chip{font-size:10px;font-weight:500;padding:2px 7px;border-radius:10px;display:inline-flex;align-items:center;gap:3px}
+.dir-chip{font-size:10px;font-weight:500;padding:2px 6px;border-radius:10px;display:inline-flex;align-items:center;gap:2px}
 .dir-chip.bull{background:var(--green-bg);color:var(--green);border:0.5px solid var(--green-bd)}
 .dir-chip.bear{background:var(--red-bg);color:var(--red);border:0.5px solid var(--red-bd)}
 .dir-chip.none{background:var(--bg4);color:var(--text3)}
-.status-chip{font-size:10px;font-weight:500;padding:2px 7px;border-radius:10px}
-.status-chip.watch {background:var(--amber-bg);color:var(--amber)}
-.status-chip.ready {background:var(--blue-bg);color:var(--blue)}
+.status-chip{font-size:10px;font-weight:500;padding:2px 6px;border-radius:10px}
+.status-chip.watch{background:var(--amber-bg);color:var(--amber)}
+.status-chip.ready{background:var(--blue-bg);color:var(--blue)}
 .status-chip.signal{background:var(--green-bg);color:var(--green)}
-.status-chip.none  {background:var(--bg4);color:var(--text3)}
-/* sym select */
-.sym-sel{width:100%;padding:8px 10px;border-radius:var(--r);border:0.5px solid var(--border2);background:var(--bg3);color:var(--text);font-size:13px;margin-bottom:10px;font-family:var(--font)}
-.sym-sel:focus{outline:none;border-color:var(--blue-bd)}
-.sq-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
-.sq-lbl{font-size:11px;color:var(--text3);width:72px}
-.sq-bar{flex:1;height:5px;background:var(--bg4);border-radius:3px;overflow:hidden}
-.sq-fill{height:100%;border-radius:3px;background:var(--blue);transition:width .5s}
-.sq-pct{font-size:12px;font-weight:500;color:var(--blue);min-width:32px;text-align:right}
-.status-pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;padding:3px 10px;border-radius:20px;margin-bottom:12px}
-.pill-watch {background:var(--amber-bg);color:var(--amber);border:0.5px solid var(--amber-bd)}
-.pill-ready {background:var(--blue-bg);color:var(--blue);border:0.5px solid var(--blue-bd)}
-.pill-signal{background:var(--green-bg);color:var(--green);border:0.5px solid var(--green-bd)}
-.pdot{width:6px;height:6px;border-radius:50%;background:currentColor}
-/* dir toggle */
-.dir-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
-.dir-btn{padding:9px;border-radius:var(--r);border:0.5px solid var(--border2);background:var(--bg3);color:var(--text2);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s;font-family:var(--font)}
-.dir-btn.buy.active {background:var(--green-bg);border-color:var(--green-bd);color:var(--green)}
-.dir-btn.sell.active{background:var(--red-bg);border-color:var(--red-bd);color:var(--red)}
-/* fields */
-.fg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
-.field{display:flex;flex-direction:column;gap:4px}
-.field label{font-size:11px;color:var(--text3)}
-.field input,.setting-input{border:0.5px solid var(--border2);border-radius:var(--r);padding:7px 10px;font-size:13px;background:var(--bg3);color:var(--text);font-family:var(--font)}
-.field input:focus,.setting-input:focus{outline:none;border-color:var(--blue-bd)}
-.fire-btn{width:100%;padding:11px;border-radius:var(--r);border:none;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .15s;font-family:var(--font)}
-.fire-btn.buy {background:var(--green);color:#111}
-.fire-btn.sell{background:var(--red);color:#fff}
-.fire-btn:active{transform:scale(.98)}
-.fire-btn:disabled{opacity:.35;cursor:not-allowed}
-/* positions */
+.status-chip.none{background:var(--bg4);color:var(--text3)}
+
+/* ── POSITIONS ───────────────────────── */
 .pos-table{width:100%;border-collapse:collapse}
 .pos-table th{font-size:10px;color:var(--text3);font-weight:500;padding:6px 8px;text-align:left;border-bottom:0.5px solid var(--border);text-transform:uppercase;letter-spacing:.05em}
-.pos-table td{padding:8px;font-size:13px;border-bottom:0.5px solid var(--border)}
+.pos-table td{padding:8px;font-size:12px;border-bottom:0.5px solid var(--border)}
 .pos-table tr:last-child td{border-bottom:none}
 .pos-badge{font-size:10px;font-weight:500;padding:2px 7px;border-radius:10px}
-.pos-badge.buy {background:var(--green-bg);color:var(--green);border:0.5px solid var(--green-bd)}
+.pos-badge.buy{background:var(--green-bg);color:var(--green);border:0.5px solid var(--green-bd)}
 .pos-badge.sell{background:var(--red-bg);color:var(--red);border:0.5px solid var(--red-bd)}
 .pnl-g{color:var(--green)}.pnl-r{color:var(--red)}
-.close-pos{font-size:11px;padding:3px 8px;border-radius:6px;border:0.5px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer;font-family:var(--font)}
-.close-pos:hover{border-color:var(--red-bd);color:var(--red)}
-.close-all-btn{padding:8px 14px;border-radius:var(--r);border:0.5px solid var(--red-bd);background:transparent;color:var(--red);font-size:12px;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:5px;transition:all .15s}
-.close-all-btn:hover{background:var(--red-bg)}
+.close-pos{font-size:11px;padding:4px 10px;border-radius:6px;border:0.5px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer;font-family:var(--font)}
+.close-pos:active{border-color:var(--red-bd);color:var(--red)}
+.close-all-btn{padding:8px 14px;border-radius:var(--r);border:0.5px solid var(--red-bd);background:transparent;color:var(--red);font-size:12px;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:5px}
 .empty{text-align:center;padding:40px;color:var(--text3);font-size:13px}
-/* settings */
-.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.sg{background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--rl);padding:16px}
-.sg-title{font-size:10px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px}
-.sr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:10px}
+
+/* ── SETTINGS ────────────────────────── */
+.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.sg{background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--rl);padding:14px}
+.sg-title{font-size:10px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
+.sr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px}
 .sr:last-child{margin-bottom:0}
-.sr-label{font-size:13px;color:var(--text2);flex:1}
-.setting-input{width:88px;text-align:right}
-/* toggle */
+.sr-label{font-size:12px;color:var(--text2);flex:1}
+.setting-input{width:80px;text-align:right}
 .toggle{position:relative;width:36px;height:20px;flex-shrink:0}
 .toggle input{opacity:0;width:0;height:0}
 .tslider{position:absolute;inset:0;border-radius:20px;background:var(--bg4);cursor:pointer;transition:.2s}
 .tslider:before{content:'';position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;top:3px;left:3px;transition:.2s}
 .toggle input:checked + .tslider{background:var(--green)}
 .toggle input:checked + .tslider:before{transform:translateX(16px)}
-/* ea control */
-.ea-row{display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--rl);margin-bottom:14px}
-.ea-dot{width:8px;height:8px;border-radius:50%;background:var(--red);transition:background .3s}
+.ea-row{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--rl);margin-bottom:12px}
+.ea-dot{width:8px;height:8px;border-radius:50%;background:var(--red);transition:background .3s;flex-shrink:0}
 .ea-dot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
 .ea-txt{font-size:13px;color:var(--text2);flex:1}
 .ea-btn{padding:7px 14px;border-radius:var(--r);border:0.5px solid var(--border2);background:var(--bg3);color:var(--text2);font-size:12px;cursor:pointer;font-family:var(--font)}
-.ea-btn:hover{border-color:var(--blue-bd);color:var(--blue)}
 .save-btn{padding:10px 20px;border-radius:var(--r);border:none;background:var(--blue);color:#fff;font-size:13px;font-weight:500;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:6px}
-.save-btn:hover{opacity:.9}
-.row-end{display:flex;justify-content:flex-end;margin-top:14px}
-/* toast */
-.toast{position:fixed;bottom:20px;right:20px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--r);padding:10px 16px;font-size:13px;color:var(--text);opacity:0;transition:opacity .2s;pointer-events:none;z-index:200;display:flex;align-items:center;gap:8px}
+.row-end{display:flex;justify-content:flex-end;margin-top:12px}
+
+/* ── MOBILE NAV (bottom bar) ─────────── */
+.mobile-nav{display:none;position:fixed;bottom:0;left:0;right:0;height:calc(var(--nav-h) + var(--safe-bottom));background:var(--bg2);border-top:0.5px solid var(--border);z-index:100;align-items:flex-start;justify-content:space-around;padding-top:6px}
+.mob-tab{display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 12px;border:none;background:transparent;color:var(--text3);font-size:10px;cursor:pointer;font-family:var(--font);position:relative;-webkit-tap-highlight-color:transparent}
+.mob-tab i{font-size:20px}
+.mob-tab.active{color:var(--blue)}
+.mob-badge{position:absolute;top:2px;right:6px;min-width:16px;height:16px;background:var(--blue);color:#fff;font-size:9px;font-weight:600;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 3px}
+
+/* ── MOBILE HEADER ───────────────────── */
+.mobile-header{display:none;background:var(--bg2);border-bottom:0.5px solid var(--border);padding:10px 16px;flex-shrink:0;align-items:center;justify-content:space-between}
+.mob-logo{display:flex;align-items:center;gap:8px}
+.mob-title{font-size:14px;font-weight:500}
+.mob-status{display:flex;align-items:center;gap:5px}
+
+/* ── MOBILE ALERTS SHEET ─────────────── */
+.alerts-sheet{display:none;position:fixed;inset:0;background:var(--bg);z-index:200;flex-direction:column}
+.alerts-sheet.open{display:flex}
+.sheet-head{padding:14px 16px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.sheet-title{font-size:14px;font-weight:500}
+.sheet-close{width:32px;height:32px;border-radius:50%;background:var(--bg3);border:none;color:var(--text2);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.sheet-body{flex:1;overflow-y:auto;padding:12px}
+
+/* ── TOAST ───────────────────────────── */
+.toast{position:fixed;bottom:calc(var(--nav-h) + var(--safe-bottom) + 12px);left:50%;transform:translateX(-50%);background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--r);padding:10px 16px;font-size:13px;color:var(--text);opacity:0;transition:opacity .2s;pointer-events:none;z-index:300;white-space:nowrap;max-width:90vw;text-overflow:ellipsis;overflow:hidden}
 .toast.show{opacity:1}
 .toast.ok{border-color:var(--green-bd)}
 .toast.err{border-color:var(--red-bd)}
-/* last-updated ticker */
-.ticker{font-size:10px;color:var(--text3);padding:6px 16px;border-top:0.5px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:6px}
-.ticker-dot{width:5px;height:5px;border-radius:50%;background:var(--text3);transition:background .3s}
-.ticker-dot.live{background:var(--green)}
+
+/* ── RESPONSIVE ──────────────────────── */
+@media (max-width: 768px) {
+  .layout{grid-template-columns:1fr;height:calc(100dvh - var(--nav-h) - var(--safe-bottom))}
+  .sidebar{display:none}
+  .mobile-header{display:flex}
+  .mobile-nav{display:flex}
+  .main{height:100%}
+  .trade-grid{grid-template-columns:1fr}
+  .settings-grid{grid-template-columns:1fr}
+  .tab-body{padding:12px}
+  /* hide desktop tabs, use bottom nav instead */
+  .tabs{display:none}
+  /* scanner — hide direction col on narrow */
+  .hide-mobile{display:none}
+  .toast{bottom:calc(var(--nav-h) + var(--safe-bottom) + 10px)}
+  /* larger touch targets */
+  .close-pos{padding:6px 12px}
+  .dir-btn{padding:12px 9px}
+}
+
+@media (max-width: 400px) {
+  .acct-grid{grid-template-columns:1fr 1fr}
+  .fg{grid-template-columns:1fr 1fr}
+  .sq-mini-bar{width:36px}
+}
 </style>
 </head>
 <body>
+
+<!-- MOBILE HEADER -->
+<div class="mobile-header" id="mob-header">
+  <div class="mob-logo">
+    <div class="sb-icon"><i class="ti ti-chart-dots-3"></i></div>
+    <div>
+      <div class="mob-title">Squeezy EA</div>
+      <div style="font-size:10px;color:var(--text3)">v2.02</div>
+    </div>
+  </div>
+  <div class="mob-status">
+    <div class="bdot" id="bdot-mob"></div>
+    <span style="font-size:11px;color:var(--text2)" id="blabel-mob">Connecting…</span>
+  </div>
+</div>
+
 <div class="layout">
 
-  <!-- SIDEBAR -->
+  <!-- SIDEBAR (desktop) -->
   <div class="sidebar">
     <div class="sb-head">
       <div class="sb-logo">
@@ -192,7 +255,6 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
         <span class="blabel" id="blabel">Connecting…</span>
       </div>
     </div>
-
     <div class="sb-acct">
       <div class="acct-grid">
         <div class="acct-card"><div class="acct-lbl">Balance</div><div class="acct-val" id="a-bal">—</div></div>
@@ -201,12 +263,10 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
         <div class="acct-card"><div class="acct-lbl">Open trades</div><div class="acct-val" id="a-open">0</div></div>
       </div>
     </div>
-
     <div class="sb-feed-title">Live alerts</div>
-    <div class="alert-feed" id="alert-feed">
+    <div class="alert-feed" id="alert-feed-desk">
       <div style="font-size:12px;color:var(--text3);text-align:center;padding:24px 0">Waiting for squeeze alerts…</div>
     </div>
-
     <div class="ticker">
       <div class="ticker-dot" id="ticker-dot"></div>
       <span id="ticker-txt">Not connected</span>
@@ -215,20 +275,26 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
 
   <!-- MAIN -->
   <div class="main">
+    <!-- Desktop tabs -->
     <div class="tabs">
-      <button class="tab active" onclick="tab('trade')" id="ttrade"><i class="ti ti-bolt"></i> Trade</button>
-      <button class="tab" onclick="tab('scanner')" id="tscanner"><i class="ti ti-radar"></i> Scanner</button>
-      <button class="tab" onclick="tab('positions')" id="tpositions">
+      <button class="tab active" onclick="switchTab('trade')" id="ttrade"><i class="ti ti-bolt"></i> Trade</button>
+      <button class="tab" onclick="switchTab('scanner')" id="tscanner"><i class="ti ti-radar"></i> Scanner</button>
+      <button class="tab" onclick="switchTab('positions')" id="tpositions">
         <i class="ti ti-activity"></i> Positions
         <span class="tab-count" id="pos-count-badge" style="display:none">0</span>
       </button>
-      <button class="tab" onclick="tab('settings')" id="tsettings"><i class="ti ti-settings"></i> EA Settings</button>
+      <button class="tab" onclick="switchTab('settings')" id="tsettings"><i class="ti ti-settings"></i> EA Settings</button>
     </div>
 
     <div class="tab-body">
 
       <!-- TRADE -->
       <div class="pane active" id="pane-trade">
+        <!-- Mobile account strip -->
+        <div class="acct-grid" style="margin-bottom:12px;display:none" id="mob-acct-strip">
+          <div class="acct-card"><div class="acct-lbl">Balance</div><div class="acct-val" id="a-bal-mob">—</div></div>
+          <div class="acct-card"><div class="acct-lbl">Floating P/L</div><div class="acct-val" id="a-pnl-mob">—</div></div>
+        </div>
         <div class="trade-grid">
           <div class="card">
             <div class="card-title"><i class="ti ti-map-pin"></i> Symbol</div>
@@ -251,7 +317,6 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
             </div>
             <div style="font-size:11px;color:var(--text3)" id="sym-dir-txt">No breakout detected</div>
           </div>
-
           <div class="card">
             <div class="card-title"><i class="ti ti-target"></i> Place trade</div>
             <div class="dir-row">
@@ -259,12 +324,12 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
               <button class="dir-btn sell" id="btn-sell" onclick="setDir(-1)"><i class="ti ti-arrow-down"></i> Sell</button>
             </div>
             <div class="fg">
-              <div class="field"><label>Lot size</label><input type="number" id="lot" value="0.05" step="0.01" min="0.01"></div>
-              <div class="field"><label>Positions</label><input type="number" id="pcount" value="1" step="1" min="1" max="50"></div>
+              <div class="field"><label>Lot size</label><input type="number" id="lot" value="0.05" step="0.01" min="0.01" inputmode="decimal"></div>
+              <div class="field"><label>Positions</label><input type="number" id="pcount" value="1" step="1" min="1" max="50" inputmode="numeric"></div>
             </div>
             <div class="fg">
-              <div class="field"><label>TP (USD)</label><input type="number" id="tp" value="2.00" step="0.5"></div>
-              <div class="field"><label>SL (USD)</label><input type="number" id="sl" value="2.00" step="0.5"></div>
+              <div class="field"><label>TP (USD)</label><input type="number" id="tp" value="2.00" step="0.5" inputmode="decimal"></div>
+              <div class="field"><label>SL (USD)</label><input type="number" id="sl" value="2.00" step="0.5" inputmode="decimal"></div>
             </div>
             <button class="fire-btn buy" id="fire-btn" onclick="fireTrade()">
               <i class="ti ti-bolt"></i><span id="fire-lbl">Fire burst — BUY</span>
@@ -276,12 +341,15 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
       <!-- SCANNER -->
       <div class="pane" id="pane-scanner">
         <div class="card" style="padding:0;overflow:hidden">
-          <table class="scanner-table" id="scanner-table">
+          <table class="scanner-table">
             <thead><tr>
-              <th>Symbol</th><th>Squeeze</th><th>Score</th><th>Direction</th><th>Status</th>
+              <th>Symbol</th>
+              <th>Score</th>
+              <th class="hide-mobile">Direction</th>
+              <th>Status</th>
             </tr></thead>
             <tbody id="scanner-body">
-              <tr><td colspan="5" class="empty">Waiting for live data from MT5…</td></tr>
+              <tr><td colspan="4" class="empty">Waiting for live data…</td></tr>
             </tbody>
           </table>
         </div>
@@ -289,7 +357,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
 
       <!-- POSITIONS -->
       <div class="pane" id="pane-positions">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
           <h2 style="font-size:14px;font-weight:500;color:var(--text2)">Open positions</h2>
           <button class="close-all-btn" onclick="closeAll()"><i class="ti ti-x"></i> Close all</button>
         </div>
@@ -310,16 +378,16 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
         <div class="settings-grid">
           <div class="sg">
             <div class="sg-title">Squeeze detection</div>
-            <div class="sr"><span class="sr-label">BBW percentile (%)</span><input class="setting-input" type="number" id="s-sqpct" value="50" step="5"></div>
-            <div class="sr"><span class="sr-label">ATR percentile (%)</span><input class="setting-input" type="number" id="s-atrpct" value="40" step="5"></div>
-            <div class="sr"><span class="sr-label">Min squeeze score (%)</span><input class="setting-input" type="number" id="s-minscore" value="60" step="5"></div>
-            <div class="sr"><span class="sr-label">Expansion needed (%)</span><input class="setting-input" type="number" id="s-expansion" value="20" step="5"></div>
+            <div class="sr"><span class="sr-label">BBW percentile (%)</span><input class="setting-input" type="number" id="s-sqpct" value="50" step="5" inputmode="numeric"></div>
+            <div class="sr"><span class="sr-label">ATR percentile (%)</span><input class="setting-input" type="number" id="s-atrpct" value="40" step="5" inputmode="numeric"></div>
+            <div class="sr"><span class="sr-label">Min squeeze score (%)</span><input class="setting-input" type="number" id="s-minscore" value="60" step="5" inputmode="numeric"></div>
+            <div class="sr"><span class="sr-label">Expansion needed (%)</span><input class="setting-input" type="number" id="s-expansion" value="20" step="5" inputmode="numeric"></div>
           </div>
           <div class="sg">
             <div class="sg-title">Trade defaults</div>
-            <div class="sr"><span class="sr-label">Default lot size</span><input class="setting-input" type="number" id="s-lot" value="0.05" step="0.01"></div>
-            <div class="sr"><span class="sr-label">TP (USD)</span><input class="setting-input" type="number" id="s-tp" value="2.00" step="0.5"></div>
-            <div class="sr"><span class="sr-label">SL (USD)</span><input class="setting-input" type="number" id="s-sl" value="2.00" step="0.5"></div>
+            <div class="sr"><span class="sr-label">Default lot size</span><input class="setting-input" type="number" id="s-lot" value="0.05" step="0.01" inputmode="decimal"></div>
+            <div class="sr"><span class="sr-label">TP (USD)</span><input class="setting-input" type="number" id="s-tp" value="2.00" step="0.5" inputmode="decimal"></div>
+            <div class="sr"><span class="sr-label">SL (USD)</span><input class="setting-input" type="number" id="s-sl" value="2.00" step="0.5" inputmode="decimal"></div>
           </div>
           <div class="sg">
             <div class="sg-title">Alert levels</div>
@@ -329,213 +397,251 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);height:100vh
           </div>
           <div class="sg">
             <div class="sg-title">Cooldowns (seconds)</div>
-            <div class="sr"><span class="sr-label">WATCH cooldown</span><input class="setting-input" type="number" id="s-cdwatch" value="300" step="30"></div>
-            <div class="sr"><span class="sr-label">READY cooldown</span><input class="setting-input" type="number" id="s-cdready" value="120" step="30"></div>
-            <div class="sr"><span class="sr-label">SIGNAL cooldown</span><input class="setting-input" type="number" id="s-cdsig" value="300" step="30"></div>
+            <div class="sr"><span class="sr-label">WATCH cooldown</span><input class="setting-input" type="number" id="s-cdwatch" value="300" step="30" inputmode="numeric"></div>
+            <div class="sr"><span class="sr-label">READY cooldown</span><input class="setting-input" type="number" id="s-cdready" value="120" step="30" inputmode="numeric"></div>
+            <div class="sr"><span class="sr-label">SIGNAL cooldown</span><input class="setting-input" type="number" id="s-cdsig" value="300" step="30" inputmode="numeric"></div>
           </div>
         </div>
         <div class="row-end">
-          <button class="save-btn" onclick="saveSettings()"><i class="ti ti-device-floppy"></i> Save &amp; apply to EA</button>
+          <button class="save-btn" onclick="saveSettings()"><i class="ti ti-device-floppy"></i> Save &amp; apply</button>
         </div>
       </div>
 
-    </div><!-- /tab-body -->
-  </div><!-- /main -->
+    </div>
+  </div>
+</div>
+
+<!-- MOBILE BOTTOM NAV -->
+<nav class="mobile-nav" role="navigation" aria-label="Main navigation">
+  <button class="mob-tab active" onclick="switchTab('trade')" id="mtrade">
+    <i class="ti ti-bolt"></i><span>Trade</span>
+  </button>
+  <button class="mob-tab" onclick="switchTab('scanner')" id="mscanner">
+    <i class="ti ti-radar"></i><span>Scanner</span>
+  </button>
+  <button class="mob-tab" onclick="switchTab('positions')" id="mpositions">
+    <i class="ti ti-activity"></i><span>Positions</span>
+    <span class="mob-badge" id="mob-pos-badge" style="display:none">0</span>
+  </button>
+  <button class="mob-tab" onclick="openAlerts()" id="malerts">
+    <i class="ti ti-bell"></i><span>Alerts</span>
+    <span class="mob-badge" id="mob-alert-badge" style="display:none">0</span>
+  </button>
+  <button class="mob-tab" onclick="switchTab('settings')" id="msettings">
+    <i class="ti ti-settings"></i><span>Settings</span>
+  </button>
+</nav>
+
+<!-- MOBILE ALERTS SHEET -->
+<div class="alerts-sheet" id="alerts-sheet" role="dialog" aria-label="Live alerts">
+  <div class="sheet-head">
+    <span class="sheet-title">Live alerts</span>
+    <button class="sheet-close" onclick="closeAlerts()" aria-label="Close">✕</button>
+  </div>
+  <div class="sheet-body">
+    <div class="alert-feed" id="alert-feed-mob" style="max-height:none;overflow:visible">
+      <div style="font-size:12px;color:var(--text3);text-align:center;padding:24px 0">Waiting for squeeze alerts…</div>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
-// ── CONFIG ──────────────────────────────
-const WS_URL = (location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws';
+const WS_URL=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws';
+let ws,direction=1,positions=[],symStates={},alertLog=[],eaRunning=false;
+let newAlertCount=0;
 
-// ── STATE ───────────────────────────────
-let ws, direction=1, positions=[], symStates={}, alertLog=[], eaRunning=false;
+// ── RESPONSIVE HELPERS ───────────────────
+const isMobile=()=>window.innerWidth<=768;
 
-// ── WEBSOCKET ───────────────────────────
-function connect(){
-  ws = new WebSocket(WS_URL);
-  ws.onopen  = () => { setTicker(true,'Connected'); };
-  ws.onclose = () => { setTicker(false,'Reconnecting…'); setBridge(false); setTimeout(connect,3000); };
-  ws.onerror = e  => console.error('[WS]',e);
-  ws.onmessage = e => {
-    let m; try{ m=JSON.parse(e.data); }catch{ return; }
-    handle(m);
-  };
+function showMobAcct(on){
+  document.getElementById('mob-acct-strip').style.display=on?'grid':'none';
 }
+window.addEventListener('resize',()=>{ showMobAcct(isMobile()&&document.getElementById('pane-trade').classList.contains('active')); });
 
+// ── WEBSOCKET ─────────────────────────────
+function connect(){
+  ws=new WebSocket(WS_URL);
+  ws.onopen=()=>setTicker(true,'Connected');
+  ws.onclose=()=>{ setTicker(false,'Reconnecting…'); setBridge(false); setTimeout(connect,3000); };
+  ws.onerror=e=>console.error('[WS]',e);
+  ws.onmessage=e=>{ let m;try{m=JSON.parse(e.data);}catch{return;} handle(m); };
+}
 function send(type,payload){
   if(ws&&ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type,payload}));
   else toast('Not connected','err');
 }
-
 function handle({type,payload}){
   switch(type){
     case 'BRIDGE_STATUS':    setBridge(payload.connected); break;
     case 'STATE_UPDATE':     applyState(payload); break;
     case 'POSITIONS_UPDATE': applyPositions(payload); break;
     case 'SQUEEZE_ALERT':    addAlert(payload); break;
-    case 'TRADE_RESULT':     payload.ok ? toast('Trade opened — #'+payload.ticket,'ok') : toast('Trade failed: '+payload.error,'err'); break;
-    case 'CLOSE_RESULT':     payload.ok ? toast('Position closed','ok') : toast('Close failed: '+payload.error,'err'); break;
-    case 'CLOSE_ALL_RESULT': toast('Closed '+payload.closed+' position(s)', payload.ok?'ok':'err'); break;
-    case 'SETTINGS_ACK':     applySettings(payload); toast('Settings saved & applied','ok'); break;
+    case 'TRADE_RESULT':     payload.ok?toast('Trade opened ✓','ok'):toast('Trade failed: '+payload.error,'err'); break;
+    case 'CLOSE_RESULT':     payload.ok?toast('Position closed','ok'):toast('Close failed: '+payload.error,'err'); break;
+    case 'CLOSE_ALL_RESULT': toast('Closed '+payload.closed+' position(s)',payload.ok?'ok':'err'); break;
+    case 'SETTINGS_ACK':     applySettings(payload); toast('Settings saved','ok'); break;
     case 'SETTINGS':         applySettings(payload); break;
     case 'ERROR':            toast(payload.message,'err'); break;
   }
 }
 
-// ── BRIDGE / TICKER ─────────────────────
+// ── STATUS ────────────────────────────────
 function setBridge(on){
-  document.getElementById('bdot').classList.toggle('on',on);
-  document.getElementById('blabel').textContent = on ? 'VPS bridge online' : 'VPS disconnected';
-  document.getElementById('fire-btn').disabled = !on;
+  ['bdot','bdot-mob'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.toggle('on',on); });
+  ['blabel','blabel-mob'].forEach(id=>{ const el=document.getElementById(id); if(el) el.textContent=on?'Deriv connected':'Disconnected'; });
+  document.getElementById('fire-btn').disabled=!on;
 }
 function setTicker(live,txt){
   document.getElementById('ticker-dot').classList.toggle('live',live);
-  document.getElementById('ticker-txt').textContent = txt + (live ? ' · '+new Date().toLocaleTimeString() : '');
+  document.getElementById('ticker-txt').textContent=txt+(live?' · '+new Date().toLocaleTimeString():'');
 }
 
-// ── STATE ───────────────────────────────
+// ── STATE ─────────────────────────────────
 function applyState({account,positions:pos,settings,sym_states}){
   if(account)    updateAccount(account);
   if(pos)        { positions=pos; renderPositions(); }
   if(settings)   applySettings(settings);
-  if(sym_states) { sym_states.forEach(s=>{ symStates[s.symbol]=s; }); renderScanner(); updateSymCard(); }
+  if(sym_states) { sym_states.forEach(s=>symStates[s.symbol]=s); renderScanner(); updateSymCard(); }
   setTicker(true,'Last update');
 }
-
 function applyPositions({positions:pos,account}){
   if(pos)     { positions=pos; renderPositions(); }
   if(account) updateAccount(account);
   setTicker(true,'Last update');
 }
-
 function updateAccount(a){
-  document.getElementById('a-bal').textContent  = '$'+a.balance.toFixed(2);
-  const fpEl = document.getElementById('a-pnl');
-  fpEl.textContent = (a.floating>=0?'+':'')+'$'+Math.abs(a.floating).toFixed(2);
-  fpEl.className = 'acct-val '+(a.floating>=0?'g':'r');
-  document.getElementById('a-eq').textContent   = '$'+a.equity.toFixed(2);
-  document.getElementById('a-open').textContent = positions.length;
+  const fmt=v=>'$'+(v||0).toFixed(2);
+  document.getElementById('a-bal').textContent=fmt(a.balance);
+  document.getElementById('a-eq').textContent=fmt(a.equity);
+  document.getElementById('a-open').textContent=positions.length;
+  const fp=a.floating||0;
+  const fpEl=document.getElementById('a-pnl');
+  fpEl.textContent=(fp>=0?'+':'')+fmt(fp);
+  fpEl.className='acct-val '+(fp>=0?'g':'r');
+  // mobile strip
+  const bm=document.getElementById('a-bal-mob');
+  const pm=document.getElementById('a-pnl-mob');
+  if(bm) bm.textContent=fmt(a.balance);
+  if(pm){ pm.textContent=(fp>=0?'+':'')+fmt(fp); pm.className='acct-val '+(fp>=0?'g':'r'); }
 }
 
-// ── SCANNER TABLE ───────────────────────
+// ── SCANNER ───────────────────────────────
 function renderScanner(){
-  const syms = Object.values(symStates);
+  const syms=Object.values(symStates).sort((a,b)=>b.score-a.score);
   if(!syms.length) return;
-  // sort: highest score first
-  syms.sort((a,b)=>b.score-a.score);
-  const tbody = document.getElementById('scanner-body');
-  tbody.innerHTML = syms.map(s=>{
-    const lvl = s.score>=80?'signal':s.score>=60?'ready':s.score>0?'watch':'none';
-    const dirLabel = s.direction===1?'<span class="dir-chip bull"><i class="ti ti-arrow-up"></i>BUY</span>'
-                   : s.direction===-1?'<span class="dir-chip bear"><i class="ti ti-arrow-down"></i>SELL</span>'
-                   : '<span class="dir-chip none">—</span>';
-    const statusLabel = lvl==='none'?'<span class="status-chip none">—</span>'
+  const mob=isMobile();
+  document.getElementById('scanner-body').innerHTML=syms.map(s=>{
+    const lvl=s.score>=80?'signal':s.score>=60?'ready':s.score>0?'watch':'none';
+    const dirLabel=s.direction===1?`<span class="dir-chip bull"><i class="ti ti-arrow-up"></i>BUY</span>`
+      :s.direction===-1?`<span class="dir-chip bear"><i class="ti ti-arrow-down"></i>SELL</span>`
+      :`<span class="dir-chip none">—</span>`;
+    const statusLabel=lvl==='none'?`<span class="status-chip none">—</span>`
       :`<span class="status-chip ${lvl}">${lvl.toUpperCase()}</span>`;
     return `<tr onclick="selectSym('${s.symbol}')" style="cursor:pointer">
       <td class="sym-name">${s.symbol.replace(' Index','')}</td>
-      <td><div class="sq-mini"><div class="sq-mini-bar"><div class="sq-mini-fill" style="width:${s.score}%"></div></div></div></td>
-      <td style="font-size:12px;color:var(--blue);font-weight:500">${s.score?s.score+'%':'—'}</td>
-      <td>${dirLabel}</td>
+      <td><div class="sq-mini"><div class="sq-mini-bar"><div class="sq-mini-fill" style="width:${s.score}%"></div></div><span style="font-size:11px;color:var(--blue);font-weight:500;margin-left:4px">${s.score?s.score+'%':'—'}</span></div></td>
+      <td class="hide-mobile">${dirLabel}</td>
       <td>${statusLabel}</td>
     </tr>`;
   }).join('');
 }
 
 function selectSym(sym){
-  document.getElementById('sym-sel').value = sym;
+  document.getElementById('sym-sel').value=sym;
   updateSymCard();
-  tab('trade');
+  switchTab('trade');
 }
 
-// ── SYM CARD ────────────────────────────
 function onSymSel(){ updateSymCard(); }
-
 function updateSymCard(){
-  const sym = document.getElementById('sym-sel').value;
-  const s   = symStates[sym];
-  const score = s ? s.score : 0;
-  document.getElementById('sq-fill').style.width = score+'%';
-  document.getElementById('sq-pct').textContent  = score ? score+'%' : '—';
-  const pill = document.getElementById('status-pill');
-  const txt  = document.getElementById('status-txt');
-  const dir  = document.getElementById('sym-dir-txt');
-  if(score>=80){ pill.className='status-pill pill-signal'; txt.textContent='SIGNAL'; }
-  else if(score>=60){ pill.className='status-pill pill-ready'; txt.textContent='READY'; }
-  else{ pill.className='status-pill pill-watch'; txt.textContent='WATCH'; }
-  if(s && s.direction===1)       dir.textContent='↑ Bullish breakout detected';
-  else if(s && s.direction===-1) dir.textContent='↓ Bearish breakout detected';
-  else                           dir.textContent='No breakout detected';
-  dir.style.color = s&&s.direction===1?'var(--green)':s&&s.direction===-1?'var(--red)':'var(--text3)';
+  const sym=document.getElementById('sym-sel').value;
+  const s=symStates[sym];
+  const score=s?s.score:0;
+  document.getElementById('sq-fill').style.width=score+'%';
+  document.getElementById('sq-pct').textContent=score?score+'%':'—';
+  const pill=document.getElementById('status-pill');
+  const txt=document.getElementById('status-txt');
+  const dir=document.getElementById('sym-dir-txt');
+  if(score>=80){pill.className='status-pill pill-signal';txt.textContent='SIGNAL';}
+  else if(score>=60){pill.className='status-pill pill-ready';txt.textContent='READY';}
+  else{pill.className='status-pill pill-watch';txt.textContent='WATCH';}
+  if(s&&s.direction===1){dir.textContent='↑ Bullish breakout detected';dir.style.color='var(--green)';}
+  else if(s&&s.direction===-1){dir.textContent='↓ Bearish breakout detected';dir.style.color='var(--red)';}
+  else{dir.textContent='No breakout detected';dir.style.color='var(--text3)';}
 }
 
-// ── ALERTS ──────────────────────────────
+// ── ALERTS ────────────────────────────────
 function addAlert(a){
   alertLog.unshift(a);
   if(alertLog.length>40) alertLog.pop();
   renderAlerts();
-  // flash ticker
-  const dot = document.getElementById('ticker-dot');
+  // badge on mobile alerts tab
+  if(!document.getElementById('alerts-sheet').classList.contains('open')){
+    newAlertCount++;
+    const b=document.getElementById('mob-alert-badge');
+    b.textContent=newAlertCount>9?'9+':newAlertCount;
+    b.style.display='flex';
+  }
+  const dot=document.getElementById('ticker-dot');
   dot.style.background='var(--amber)';
   setTimeout(()=>dot.style.background='',800);
 }
 
 function renderAlerts(){
-  const feed = document.getElementById('alert-feed');
-  if(!alertLog.length) return;
-  feed.innerHTML = alertLog.map(a=>{
-    const lvl  = (a.level||'watch').toLowerCase();
-    const time = new Date(a.time||Date.now()).toLocaleTimeString();
-    const score= a.score||0;
-    const dirChip = a.direction===1
-      ? '<span class="al-dir bull">↑ BUY</span>'
-      : a.direction===-1
-      ? '<span class="al-dir bear">↓ SELL</span>' : '';
+  const html=alertLog.length?alertLog.map(a=>{
+    const lvl=(a.level||'watch').toLowerCase();
+    const time=new Date(a.time||Date.now()).toLocaleTimeString();
+    const score=a.score||0;
+    const dirChip=a.direction===1?'<span class="al-dir bull">↑ BUY</span>'
+      :a.direction===-1?'<span class="al-dir bear">↓ SELL</span>':'';
     return `<div class="al-item">
-      <div class="al-top">
-        <span class="al-badge ${lvl}">${lvl.toUpperCase()}</span>
-        ${dirChip}
-        <span class="al-time">${time}</span>
-      </div>
+      <div class="al-top"><span class="al-badge ${lvl}">${lvl.toUpperCase()}</span>${dirChip}<span class="al-time">${time}</span></div>
       <div class="al-sym">${(a.symbol||'').replace(' Index','')}</div>
-      <div class="al-bar-row">
-        <div class="al-bar"><div class="al-fill ${lvl}" style="width:${score}%"></div></div>
-        <span class="al-score-txt">${score}%</span>
-      </div>
+      <div class="al-bar-row"><div class="al-bar"><div class="al-fill ${lvl}" style="width:${score}%"></div></div><span class="al-score-txt">${score}%</span></div>
     </div>`;
-  }).join('');
+  }).join(''):'<div style="font-size:12px;color:var(--text3);text-align:center;padding:24px 0">Waiting for squeeze alerts…</div>';
+  document.getElementById('alert-feed-desk').innerHTML=html;
+  document.getElementById('alert-feed-mob').innerHTML=html;
 }
 
-// ── POSITIONS ───────────────────────────
+function openAlerts(){
+  document.getElementById('alerts-sheet').classList.add('open');
+  newAlertCount=0;
+  document.getElementById('mob-alert-badge').style.display='none';
+}
+function closeAlerts(){ document.getElementById('alerts-sheet').classList.remove('open'); }
+
+// ── POSITIONS ─────────────────────────────
 function renderPositions(){
-  const wrap  = document.getElementById('pos-wrap');
-  const badge = document.getElementById('pos-count-badge');
-  document.getElementById('a-open').textContent = positions.length;
-  if(!positions.length){
-    badge.style.display='none';
+  const wrap=document.getElementById('pos-wrap');
+  const badge=document.getElementById('pos-count-badge');
+  const mobBadge=document.getElementById('mob-pos-badge');
+  document.getElementById('a-open').textContent=positions.length;
+  const cnt=positions.length;
+  badge.style.display=cnt?'inline':'none'; badge.textContent=cnt;
+  mobBadge.style.display=cnt?'flex':'none'; mobBadge.textContent=cnt>9?'9+':cnt;
+  if(!cnt){
     wrap.innerHTML='<div class="empty"><i class="ti ti-inbox" style="font-size:24px;display:block;margin-bottom:8px"></i>No open positions</div>';
     return;
   }
-  badge.style.display='inline';
-  badge.textContent=positions.length;
-  wrap.innerHTML=`<table class="pos-table">
-    <thead><tr><th>Dir</th><th>Symbol</th><th>Lot</th><th>Open</th><th>Current</th><th>P/L</th><th></th></tr></thead>
+  wrap.innerHTML=`<div style="overflow-x:auto"><table class="pos-table">
+    <thead><tr><th>Dir</th><th>Symbol</th><th class="hide-mobile">Lot</th><th class="hide-mobile">Open</th><th>P/L</th><th></th></tr></thead>
     <tbody>${positions.map(p=>`
       <tr>
         <td><span class="pos-badge ${p.dir.toLowerCase()}">${p.dir}</span></td>
         <td style="color:var(--text2)">${p.symbol.replace(' Index','')}</td>
-        <td>${p.lot}</td>
-        <td style="color:var(--text3)">${p.open_price}</td>
-        <td>${p.current_price}</td>
+        <td class="hide-mobile">${p.lot}</td>
+        <td class="hide-mobile" style="color:var(--text3)">${p.open_price}</td>
         <td class="${p.pnl>=0?'pnl-g':'pnl-r'}">${p.pnl>=0?'+':''}$${p.pnl.toFixed(2)}</td>
         <td><button class="close-pos" onclick="closePos(${p.ticket})">close</button></td>
       </tr>`).join('')}
     </tbody>
-  </table>`;
+  </table></div>`;
 }
 
-// ── SETTINGS ────────────────────────────
+// ── SETTINGS ──────────────────────────────
 function applySettings(s){
   if(s.squeeze_percentile!==undefined) document.getElementById('s-sqpct').value=s.squeeze_percentile;
   if(s.atr_percentile!==undefined)     document.getElementById('s-atrpct').value=s.atr_percentile;
@@ -552,15 +658,14 @@ function applySettings(s){
   if(s.cooldown_signal!==undefined)    document.getElementById('s-cdsig').value=s.cooldown_signal;
   if(s.ea_running!==undefined)         setEA(s.ea_running);
 }
-
 function setEA(on){
   eaRunning=on;
   document.getElementById('ea-dot').classList.toggle('on',on);
-  document.getElementById('ea-txt').textContent = on?'EA is running':'EA is stopped';
-  document.getElementById('ea-btn').textContent = on?'Stop EA':'Start EA';
+  document.getElementById('ea-txt').textContent=on?'EA is running':'EA is stopped';
+  document.getElementById('ea-btn').textContent=on?'Stop EA':'Start EA';
 }
 
-// ── ACTIONS ─────────────────────────────
+// ── ACTIONS ───────────────────────────────
 function setDir(d){
   direction=d;
   document.getElementById('btn-buy').classList.toggle('active',d===1);
@@ -568,18 +673,15 @@ function setDir(d){
   document.getElementById('fire-btn').className='fire-btn '+(d===1?'buy':'sell');
   document.getElementById('fire-lbl').textContent='Fire burst — '+(d===1?'BUY':'SELL');
 }
-
 function fireTrade(){
-  const sym   = document.getElementById('sym-sel').value;
-  const lot   = parseFloat(document.getElementById('lot').value)||0.05;
-  const count = parseInt(document.getElementById('pcount').value)||1;
-  const tp    = parseFloat(document.getElementById('tp').value)||2;
-  const sl    = parseFloat(document.getElementById('sl').value)||2;
-  for(let i=0;i<count;i++)
-    send('FIRE_TRADE',{symbol:sym,direction:direction===1?'BUY':'SELL',lot,tp_usd:tp,sl_usd:sl});
-  toast(`Firing ${count}× ${direction===1?'BUY':'SELL'} on ${sym.replace(' Index','')}`);
+  const sym=document.getElementById('sym-sel').value;
+  const lot=parseFloat(document.getElementById('lot').value)||0.05;
+  const count=parseInt(document.getElementById('pcount').value)||1;
+  const tp=parseFloat(document.getElementById('tp').value)||2;
+  const sl=parseFloat(document.getElementById('sl').value)||2;
+  for(let i=0;i<count;i++) send('FIRE_TRADE',{symbol:sym,direction:direction===1?'BUY':'SELL',lot,tp_usd:tp,sl_usd:sl});
+  toast(`Firing ${count}× ${direction===1?'BUY':'SELL'}`);
 }
-
 function closePos(ticket){ send('CLOSE_POSITION',{ticket}); }
 function closeAll(){
   if(!positions.length) return;
@@ -589,38 +691,45 @@ function closeAll(){
 function toggleEA(){ send('UPDATE_SETTINGS',{ea_running:!eaRunning}); }
 function saveSettings(){
   send('UPDATE_SETTINGS',{
-    squeeze_percentile: parseFloat(document.getElementById('s-sqpct').value),
-    atr_percentile:     parseFloat(document.getElementById('s-atrpct').value),
-    min_squeeze_score:  parseFloat(document.getElementById('s-minscore').value),
-    expansion_pct:      parseFloat(document.getElementById('s-expansion').value),
-    lot_size:           parseFloat(document.getElementById('s-lot').value),
-    tp_usd:             parseFloat(document.getElementById('s-tp').value),
-    sl_usd:             parseFloat(document.getElementById('s-sl').value),
-    alert_watch:        document.getElementById('s-watch').checked,
-    alert_ready:        document.getElementById('s-ready').checked,
-    alert_signal:       document.getElementById('s-signal').checked,
-    cooldown_watch:     parseInt(document.getElementById('s-cdwatch').value),
-    cooldown_ready:     parseInt(document.getElementById('s-cdready').value),
-    cooldown_signal:    parseInt(document.getElementById('s-cdsig').value),
+    squeeze_percentile:parseFloat(document.getElementById('s-sqpct').value),
+    atr_percentile:parseFloat(document.getElementById('s-atrpct').value),
+    min_squeeze_score:parseFloat(document.getElementById('s-minscore').value),
+    expansion_pct:parseFloat(document.getElementById('s-expansion').value),
+    lot_size:parseFloat(document.getElementById('s-lot').value),
+    tp_usd:parseFloat(document.getElementById('s-tp').value),
+    sl_usd:parseFloat(document.getElementById('s-sl').value),
+    alert_watch:document.getElementById('s-watch').checked,
+    alert_ready:document.getElementById('s-ready').checked,
+    alert_signal:document.getElementById('s-signal').checked,
+    cooldown_watch:parseInt(document.getElementById('s-cdwatch').value),
+    cooldown_ready:parseInt(document.getElementById('s-cdready').value),
+    cooldown_signal:parseInt(document.getElementById('s-cdsig').value),
   });
 }
 
-// ── TABS ────────────────────────────────
-function tab(name){
+// ── TABS ──────────────────────────────────
+function switchTab(name){
   ['trade','scanner','positions','settings'].forEach(t=>{
     document.getElementById('pane-'+t).classList.toggle('active',t===name);
-    document.getElementById('t'+t).classList.toggle('active',t===name);
+    // desktop tabs
+    const dt=document.getElementById('t'+t); if(dt) dt.classList.toggle('active',t===name);
+    // mobile tabs
+    const mt=document.getElementById('m'+t); if(mt) mt.classList.toggle('active',t===name);
   });
+  // show account strip on mobile trade tab
+  showMobAcct(isMobile()&&name==='trade');
 }
 
-// ── TOAST ───────────────────────────────
+// ── TOAST ─────────────────────────────────
 function toast(msg,type=''){
   const t=document.getElementById('toast');
-  t.textContent=msg; t.className='toast '+(type==='ok'?'ok':type==='err'?'err':'')+' show';
+  t.textContent=msg;
+  t.className='toast '+(type==='ok'?'ok':type==='err'?'err':'')+' show';
   setTimeout(()=>t.classList.remove('show'),2500);
 }
 
 connect();
+showMobAcct(isMobile());
 </script>
 </body>
 </html>
