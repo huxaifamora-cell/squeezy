@@ -427,6 +427,24 @@ function handleTradingMsg(msg) {
       pnl:parseFloat(((c.bid_price||c.buy_price)-c.buy_price).toFixed(2)),
     }));
     broadcastDash({type:"POSITIONS_UPDATE",payload:{account:accountState,positions:positionsState}});
+  } else if (type==="proposal") {
+    if (msg.error) {
+      broadcastDash({type:"TRADE_RESULT",payload:{ok:false,error:msg.error.message}});
+      delete pendingProposals[msg.req_id];
+      return;
+    }
+    const proposal_id = msg.proposal?.id;
+    const price       = msg.proposal?.ask_price;
+    const pending     = pendingProposals[msg.req_id];
+    if (!proposal_id || !pending) return;
+    delete pendingProposals[msg.req_id];
+    // Step 2: now buy using the proposal ID
+    console.log(`[TRADE] Buying proposal ${proposal_id} @ $${price}`);
+    tradingWs.send(JSON.stringify({
+      buy:         proposal_id,
+      price:       price,
+      req_id:      reqId++,
+    }));
   } else if (type==="buy") {
     if (msg.error) broadcastDash({type:"TRADE_RESULT",payload:{ok:false,error:msg.error.message}});
     else {
@@ -452,17 +470,31 @@ function tradingSend(obj) {
 // ─────────────────────────────────────────
 //  TRADE EXECUTION
 // ─────────────────────────────────────────
+// Pending proposals waiting for ID before buy: reqId -> {direction, tp_usd}
+const pendingProposals = {};
+
 function fireTrade({symbol,direction,lot,tp_usd}) {
-  const sym=Object.keys(SYM_NAMES).find(k=>SYM_NAMES[k]===symbol)||symbol;
-  tradingSend({
-    buy:1, price:tp_usd||2,
-    parameters:{
-      contract_type:direction==="BUY"?"CALL":"PUT",
-      symbol:sym, duration:5, duration_unit:"m",
-      basis:"payout", amount:tp_usd||2,
-      currency:accountState?.currency||"USD",
-    }
-  });
+  const sym = Object.keys(SYM_NAMES).find(k=>SYM_NAMES[k]===symbol) || symbol;
+  const amount = parseFloat(tp_usd) || 2;
+  const contract_type = direction==="BUY" ? "CALL" : "PUT";
+  const currency = accountState?.currency || "USD";
+
+  // Step 1: request a proposal first — buy requires proposal_id
+  const id = reqId++;
+  pendingProposals[id] = { contract_type, amount, currency };
+
+  tradingWs.send(JSON.stringify({
+    proposal:          1,
+    req_id:            id,
+    contract_type,
+    underlying_symbol: sym,
+    duration:          5,
+    duration_unit:     "m",
+    basis:             "stake",
+    amount,
+    currency,
+  }));
+  console.log(`[TRADE] Proposal requested — ${direction} ${sym} stake=$${amount}`);
 }
 
 function closePosition(contractId) { tradingSend({sell:contractId,price:0}); }
