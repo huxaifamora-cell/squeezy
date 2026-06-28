@@ -245,7 +245,6 @@ async function getAccounts() {
   }
   const accounts=data.data||[];
   console.log("[DERIV] Accounts found:",accounts.map(a=>a.account_id||a.id).join(", "));
-  // store all accounts for switcher
   allAccounts=accounts.map(a=>({
     id:    a.account_id||a.id,
     type:  (a.account_id||a.id||"").startsWith("DOT")||(a.account_type||"").toLowerCase().includes("demo")?"demo":"real",
@@ -253,7 +252,6 @@ async function getAccounts() {
     label: a.account_id||a.id,
   }));
   broadcastDash({type:"ACCOUNTS_LIST",payload:{accounts:allAccounts, current:derivAccountId}});
-  // prefer demo — DOT=demo, ROT=real
   const demo=accounts.find(a=>{
     const id=(a.account_id||a.id||"");
     const type=(a.account_type||a.type||"").toLowerCase();
@@ -307,7 +305,6 @@ function connectPublicWs() {
 
   publicWs.on("error",err=>console.error("[DERIV] Public WS error:",err.message));
 
-  // keepalive
   setInterval(()=>{
     if (publicWs?.readyState===WebSocket.OPEN)
       publicWs.send(JSON.stringify({ping:1}));
@@ -338,7 +335,7 @@ function handleMarketData(msg) {
 }
 
 // ─────────────────────────────────────────
-//  TRADING WS  (authenticated — for trades + balance)
+//  TRADING WS  (authenticated)
 // ─────────────────────────────────────────
 async function connectTradingWs() {
   if (!DERIV_TOKEN) {
@@ -346,14 +343,12 @@ async function connectTradingWs() {
     return;
   }
   try {
-    // Step 1: get account ID
     if (!derivAccountId) derivAccountId=await getAccounts();
     if (!derivAccountId) {
       console.error("[DERIV] Could not get account ID — retrying in 30s");
       setTimeout(connectTradingWs,30000); return;
     }
 
-    // Step 2: get OTP → authenticated WS URL
     const wsUrl=await getOTP(derivAccountId);
     if (!wsUrl) {
       console.error("[DERIV] Could not get OTP — retrying in 30s");
@@ -367,15 +362,18 @@ async function connectTradingWs() {
       console.log("[DERIV] Trading WS connected — account:",derivAccountId);
       tradingWsReady=true;
       broadcastDash({type:"BRIDGE_STATUS",payload:{connected:true,account:derivAccountId}});
-      // subscribe to balance
+      // Subscribe to balance
       tradingWs.send(JSON.stringify({balance:1,subscribe:1,req_id:reqId++}));
-      // get portfolio
+      // Fetch portfolio
       tradingWs.send(JSON.stringify({portfolio:1,req_id:reqId++}));
+      // Subscribe to live position updates — fixes positions not showing
+      tradingWs.send(JSON.stringify({
+        proposal_open_contract:1, subscribe:1, req_id:reqId++,
+      }));
     });
 
     tradingWs.on("message",raw=>{
       let msg; try{msg=JSON.parse(raw);}catch{return;}
-      // resolve pending
       if (msg.req_id&&pending[msg.req_id]) {
         pending[msg.req_id](msg); delete pending[msg.req_id];
       }
@@ -386,13 +384,11 @@ async function connectTradingWs() {
       console.log("[DERIV] Trading WS closed — getting new OTP in 10s…");
       tradingWsReady=false;
       broadcastDash({type:"BRIDGE_STATUS",payload:{connected:false}});
-      // OTP is one-time — need to fetch a new one
       setTimeout(connectTradingWs,10000);
     });
 
     tradingWs.on("error",err=>console.error("[DERIV] Trading WS error:",err.message));
 
-    // keepalive
     const ka=setInterval(()=>{
       if (tradingWs?.readyState===WebSocket.OPEN)
         tradingWs.send(JSON.stringify({ping:1}));
@@ -407,6 +403,7 @@ async function connectTradingWs() {
 
 function handleTradingMsg(msg) {
   const type=msg.msg_type;
+
   if (type==="balance") {
     accountState={
       ...accountState,
@@ -418,44 +415,101 @@ function handleTradingMsg(msg) {
       server:"Deriv",
     };
     broadcastDash({type:"POSITIONS_UPDATE",payload:{account:accountState,positions:positionsState}});
+
   } else if (type==="portfolio") {
+    // Full portfolio snapshot — build positions list from it
     positionsState=(msg.portfolio?.contracts||[]).map(c=>({
-      ticket:c.contract_id, symbol:c.symbol,
-      dir:c.contract_type?.includes("CALL")?"BUY":"SELL",
-      lot:1, open_price:c.buy_price,
-      current_price:c.bid_price||c.buy_price,
-      pnl:parseFloat(((c.bid_price||c.buy_price)-c.buy_price).toFixed(2)),
+      ticket:        c.contract_id,
+      symbol:        c.longcode?.match(/on\s(.+?)\s/)?.[1] || c.symbol || c.underlying || "Unknown",
+      dir:           c.contract_type?.includes("CALL") ? "BUY" : "SELL",
+      lot:           1,
+      open_price:    parseFloat(c.buy_price||0).toFixed(4),
+      current_price: parseFloat(c.bid_price||c.buy_price||0).toFixed(4),
+      pnl:           parseFloat(
+                       ((parseFloat(c.bid_price)||parseFloat(c.buy_price)||0)
+                        - parseFloat(c.buy_price||0)).toFixed(2)
+                     ),
     }));
     broadcastDash({type:"POSITIONS_UPDATE",payload:{account:accountState,positions:positionsState}});
+
+  } else if (type==="proposal_open_contract") {
+    // Live per-contract update — this is the main driver for position display
+    const c=msg.proposal_open_contract;
+    if (!c) return;
+
+    if (c.is_sold) {
+      // Contract closed/expired — remove from list
+      positionsState=positionsState.filter(p=>p.ticket!==c.contract_id);
+      console.log(`[POS] Contract ${c.contract_id} closed — removed from positions`);
+    } else {
+      const idx=positionsState.findIndex(p=>p.ticket===c.contract_id);
+      const pos={
+        ticket:        c.contract_id,
+        symbol:        c.underlying || c.display_name || "Unknown",
+        dir:           c.contract_type?.includes("CALL") ? "BUY" : "SELL",
+        lot:           1,
+        open_price:    parseFloat(c.buy_price||0).toFixed(4),
+        current_price: parseFloat(c.current_spot||c.buy_price||0).toFixed(4),
+        pnl:           parseFloat((c.profit||0).toFixed(2)),
+      };
+      if (idx !== -1) {
+        positionsState[idx]=pos; // update existing
+      } else {
+        positionsState.push(pos); // new contract — add it
+        console.log(`[POS] New contract ${c.contract_id} added to positions`);
+      }
+    }
+
+    // Recalculate floating P/L for account strip
+    const floating=positionsState.reduce((sum,p)=>sum+(p.pnl||0),0);
+    if (accountState) accountState={...accountState,floating};
+
+    broadcastDash({type:"POSITIONS_UPDATE",payload:{account:accountState,positions:positionsState}});
+
   } else if (type==="proposal") {
     if (msg.error) {
       broadcastDash({type:"TRADE_RESULT",payload:{ok:false,error:msg.error.message}});
       delete pendingProposals[msg.req_id];
       return;
     }
-    const proposal_id = msg.proposal?.id;
-    const price       = msg.proposal?.ask_price;
-    const pending     = pendingProposals[msg.req_id];
-    if (!proposal_id || !pending) return;
+    const proposal_id=msg.proposal?.id;
+    const price=msg.proposal?.ask_price;
+    // FIX: renamed from 'pending' to 'pendingInfo' to avoid shadowing the outer pending object
+    const pendingInfo=pendingProposals[msg.req_id];
+    if (!proposal_id||!pendingInfo) return;
     delete pendingProposals[msg.req_id];
-    // Step 2: now buy using the proposal ID
     console.log(`[TRADE] Buying proposal ${proposal_id} @ $${price}`);
     tradingWs.send(JSON.stringify({
-      buy:         proposal_id,
-      price:       price,
-      req_id:      reqId++,
+      buy:   proposal_id,
+      price: price,
+      req_id:reqId++,
     }));
+
   } else if (type==="buy") {
-    if (msg.error) broadcastDash({type:"TRADE_RESULT",payload:{ok:false,error:msg.error.message}});
-    else {
-      broadcastDash({type:"TRADE_RESULT",payload:{ok:true,contract_id:msg.buy?.contract_id,price:msg.buy?.buy_price}});
-      tradingWs?.send(JSON.stringify({portfolio:1,req_id:reqId++}));
+    if (msg.error) {
+      broadcastDash({type:"TRADE_RESULT",payload:{ok:false,error:msg.error.message}});
+    } else {
+      const contractId=msg.buy?.contract_id;
+      const buyPrice=msg.buy?.buy_price;
+      broadcastDash({type:"TRADE_RESULT",payload:{ok:true,contract_id:contractId,price:buyPrice}});
+      console.log(`[TRADE] Buy confirmed — contract ${contractId} @ $${buyPrice}`);
+      // Delay portfolio refresh slightly so Deriv has time to register the contract
+      // The proposal_open_contract subscription will also push the new position automatically
+      setTimeout(()=>{
+        if (tradingWs?.readyState===WebSocket.OPEN)
+          tradingWs.send(JSON.stringify({portfolio:1,req_id:reqId++}));
+      }, 1500);
     }
+
   } else if (type==="sell") {
-    if (msg.error) broadcastDash({type:"CLOSE_RESULT",payload:{ok:false,error:msg.error.message}});
-    else {
+    if (msg.error) {
+      broadcastDash({type:"CLOSE_RESULT",payload:{ok:false,error:msg.error.message}});
+    } else {
       broadcastDash({type:"CLOSE_RESULT",payload:{ok:true}});
-      tradingWs?.send(JSON.stringify({portfolio:1,req_id:reqId++}));
+      setTimeout(()=>{
+        if (tradingWs?.readyState===WebSocket.OPEN)
+          tradingWs.send(JSON.stringify({portfolio:1,req_id:reqId++}));
+      }, 1000);
     }
   }
 }
@@ -470,18 +524,17 @@ function tradingSend(obj) {
 // ─────────────────────────────────────────
 //  TRADE EXECUTION
 // ─────────────────────────────────────────
-// Pending proposals waiting for ID before buy: reqId -> {direction, tp_usd}
-const pendingProposals = {};
+// Pending proposals waiting for ID before buy: reqId -> {contract_type, amount, currency}
+const pendingProposals={};
 
 function fireTrade({symbol,direction,lot,tp_usd}) {
-  const sym = Object.keys(SYM_NAMES).find(k=>SYM_NAMES[k]===symbol) || symbol;
-  const amount = parseFloat(tp_usd) || 2;
-  const contract_type = direction==="BUY" ? "CALL" : "PUT";
-  const currency = accountState?.currency || "USD";
+  const sym=Object.keys(SYM_NAMES).find(k=>SYM_NAMES[k]===symbol)||symbol;
+  const amount=parseFloat(tp_usd)||2;
+  const contract_type=direction==="BUY"?"CALL":"PUT";
+  const currency=accountState?.currency||"USD";
 
-  // Step 1: request a proposal first — buy requires proposal_id
-  const id = reqId++;
-  pendingProposals[id] = { contract_type, amount, currency };
+  const id=reqId++;
+  pendingProposals[id]={contract_type,amount,currency};
 
   tradingWs.send(JSON.stringify({
     proposal:          1,
@@ -538,7 +591,10 @@ dashWss.on("connection",ws=>{
     const {type,payload}=msg;
     switch(type) {
       case "FIRE_TRADE":
-        if (!tradingWsReady) { ws.send(JSON.stringify({type:"ERROR",payload:{message:"Trading not connected. Check DERIV_TOKEN on Render."}})); return; }
+        if (!tradingWsReady) {
+          ws.send(JSON.stringify({type:"ERROR",payload:{message:"Trading not connected. Check DERIV_TOKEN on Render."}}));
+          return;
+        }
         for (let i=0;i<(payload.count||1);i++) fireTrade(payload);
         break;
       case "CLOSE_POSITION": closePosition(payload.ticket); break;
@@ -547,48 +603,42 @@ dashWss.on("connection",ws=>{
       case "GET_SETTINGS":
         ws.send(JSON.stringify({type:"SETTINGS",payload:EA}));
         break;
-
       case "GET_ACCOUNTS":
         ws.send(JSON.stringify({type:"ACCOUNTS_LIST",payload:{accounts:allAccounts,current:derivAccountId}}));
         break;
-
       case "SWITCH_ACCOUNT":
-        // Switch to a different account (same token)
         if (!payload.account_id) return;
         console.log("[DASH] Switch account to:",payload.account_id);
-        derivAccountId = payload.account_id;
-        accountState   = null;
-        positionsState = [];
-        if (tradingWs) tradingWs.close(); // triggers reconnect with new account
+        derivAccountId=payload.account_id;
+        accountState=null;
+        positionsState=[];
+        if (tradingWs) tradingWs.close();
         broadcastDash({type:"BRIDGE_STATUS",payload:{connected:false}});
         broadcastDash({type:"ACCOUNT_SWITCHED",payload:{account_id:payload.account_id}});
-        setTimeout(connectTradingWs, 1000);
+        setTimeout(connectTradingWs,1000);
         break;
-
       case "LOGIN_TOKEN":
-        // Log in with a new PAT token
         if (!payload.token) return;
         console.log("[DASH] New token login requested");
-        DERIV_TOKEN    = payload.token;
-        derivAccountId = null;
-        allAccounts    = [];
-        accountState   = null;
-        positionsState = [];
+        DERIV_TOKEN=payload.token;
+        derivAccountId=null;
+        allAccounts=[];
+        accountState=null;
+        positionsState=[];
         if (tradingWs) tradingWs.close();
         broadcastDash({type:"BRIDGE_STATUS",payload:{connected:false}});
         broadcastDash({type:"LOGGED_OUT",payload:{}});
-        setTimeout(connectTradingWs, 1000);
+        setTimeout(connectTradingWs,1000);
         break;
-
       case "LOGOUT":
         console.log("[DASH] Logout requested");
-        DERIV_TOKEN    = "";
-        derivAccountId = null;
-        allAccounts    = [];
-        accountState   = null;
-        positionsState = [];
+        DERIV_TOKEN="";
+        derivAccountId=null;
+        allAccounts=[];
+        accountState=null;
+        positionsState=[];
         if (tradingWs) { tradingWs.close(); tradingWs=null; }
-        tradingWsReady = false;
+        tradingWsReady=false;
         broadcastDash({type:"BRIDGE_STATUS",payload:{connected:false}});
         broadcastDash({type:"LOGGED_OUT",payload:{}});
         break;
@@ -611,7 +661,7 @@ setInterval(()=>{ if(tradingWsReady) tradingSend({portfolio:1}); }, 5000);
 // ─────────────────────────────────────────
 server.listen(PORT,()=>{
   console.log(`Squeezy server on port ${PORT}`);
-  connectPublicWs();   // market data — no token needed
-  if (DERIV_TOKEN) connectTradingWs();  // trading — needs token
+  connectPublicWs();
+  if (DERIV_TOKEN) connectTradingWs();
   else console.warn("[DERIV] No DERIV_TOKEN — add it to Render env vars to enable trading");
 });
