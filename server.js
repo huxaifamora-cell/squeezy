@@ -107,12 +107,9 @@ function fetchContractsFor(ws) {
     const id = reqId++;
     pendingCallbacks[id] = (msg) => handleContractsFor(msg, sym);
     ws.send(JSON.stringify({
-      contracts_for   : sym,
-      currency        : "USD",
-      landing_company : "svg",
-      product_type    : "basic",
-      req_id          : id,
-    }));
+  contracts_for : sym,
+  req_id        : id,
+}));
   }
 }
 
