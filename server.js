@@ -91,9 +91,6 @@ let EA = {
 
 // ─────────────────────────────────────────
 //  PER-SYMBOL MULTIPLIER STORE
-//  Populated at runtime via contracts_for calls on the trading WS.
-//  Each entry: { min, available: [50, 100, 200, ...] }
-//  Falls back to [] until Deriv responds — trades are blocked until loaded.
 // ─────────────────────────────────────────
 const SYM_MULTIPLIERS = {};
 SYMBOLS.forEach(s => SYM_MULTIPLIERS[s] = { min: 50, available: [] });
@@ -107,21 +104,22 @@ function fetchContractsFor(ws) {
     const id = reqId++;
     pendingCallbacks[id] = (msg) => handleContractsFor(msg, sym);
     ws.send(JSON.stringify({
-  contracts_for : sym,
-  req_id        : id,
-}));
+      contracts_for : sym,
+      req_id        : id,
+    }));
   }
 }
 
 function handleContractsFor(msg, sym) {
   if (msg.error) {
     console.warn(`[CONTRACTS] ${sym} error: ${msg.error.message}`);
+    SYM_MULTIPLIERS[sym]._fetched = true;
+    checkAllFetched();
     return;
   }
 
   const available = msg.contracts_for?.available || [];
 
-  // Log all contract types returned so we can see what Deriv actually supports
   const allTypes = [...new Set(available.map(c => c.contract_type))];
   console.log(`[CONTRACTS] ${sym} raw contract types: ${allTypes.join(", ") || "(none)"}`);
 
@@ -136,20 +134,14 @@ function handleContractsFor(msg, sym) {
     SYM_MULTIPLIERS[sym] = { min: allMults[0], available: allMults };
     console.log(`[CONTRACTS] ${sym} → multipliers: [${allMults.join(", ")}]`);
   } else {
-    // Symbol returned no multiplier contracts — keep empty so trades are blocked
     console.warn(`[CONTRACTS] ${sym} → no MULTUP/MULTDOWN contracts found`);
   }
 
-  // Check if all symbols are resolved (have data, even if empty)
-  const done = SYMBOLS.every(s => {
-    const d = SYM_MULTIPLIERS[s];
-    // Consider resolved if we got a response (available may be empty for unsupported syms)
-    return d._fetched || d.available.length > 0;
-  });
-
-  // Mark this symbol as fetched regardless of result
   SYM_MULTIPLIERS[sym]._fetched = true;
+  checkAllFetched();
+}
 
+function checkAllFetched() {
   const allFetched = SYMBOLS.every(s => SYM_MULTIPLIERS[s]._fetched);
   if (allFetched && !contractsFetched) {
     contractsFetched = true;
@@ -161,22 +153,39 @@ function handleContractsFor(msg, sym) {
   }
 }
 
-// Resolve the best multiplier for a symbol:
-//   - If caller passed a value and it's valid for this symbol → use it
-//   - Otherwise → use the symbol's minimum (lowest accepted value)
-//   - Returns null if symbol has no known multipliers (caller should block trade)
 function resolveMultiplier(sym, requested) {
   const data = SYM_MULTIPLIERS[sym];
   const req  = parseInt(requested) || 0;
 
   if (data?.available?.length) {
-    // Use requested if valid for this symbol, else fall back to symbol minimum
     const resolved = data.available.includes(req) ? req : data.min;
     return resolved;
   }
 
-  // Data not yet fetched or symbol has no multiplier contracts
   return null;
+}
+
+// ─────────────────────────────────────────
+//  TRADE HISTORY
+// ─────────────────────────────────────────
+const tradeHistory = [];
+const MAX_HISTORY  = 200;
+
+function recordHistory(pos, closeProfit) {
+  tradeHistory.unshift({
+    id          : pos.ticket,
+    symbol      : pos.symbol,
+    dir         : pos.dir,
+    lot         : pos.lot || pos.stake,
+    multiplier  : pos.multiplier,
+    exposure    : pos.exposure,
+    open_price  : pos.open_price,
+    close_price : pos.current_price,
+    pnl         : parseFloat(n(closeProfit).toFixed(2)),
+    closed_at   : Date.now(),
+  });
+  if (tradeHistory.length > MAX_HISTORY) tradeHistory.pop();
+  broadcastDash({ type: "HISTORY_UPDATE", payload: tradeHistory });
 }
 
 // ─────────────────────────────────────────
@@ -188,7 +197,6 @@ SYMBOLS.forEach(s => candles[s] = []);
 
 // ─────────────────────────────────────────
 //  SAFE NUMBER HELPER
-//  New API returns many numeric fields as string|number — always parse safely
 // ─────────────────────────────────────────
 function n(v, fallback=0) {
   const f = parseFloat(v);
@@ -355,7 +363,7 @@ let tradingWs      = null;
 let tradingWsReady = false;
 let reqId          = 1;
 const pendingCallbacks = {};
-const pendingProposals = {};   // reqId → {sym, stake, multiplier, direction}
+const pendingProposals = {};
 
 // ─────────────────────────────────────────
 //  REST HELPERS
@@ -407,7 +415,7 @@ async function getOTP(accountId) {
 }
 
 // ─────────────────────────────────────────
-//  PUBLIC WS  (market data — no auth needed)
+//  PUBLIC WS
 // ─────────────────────────────────────────
 let publicWs=null;
 
@@ -465,7 +473,7 @@ function handleMarketData(msg) {
 }
 
 // ─────────────────────────────────────────
-//  TRADING WS  (authenticated)
+//  TRADING WS
 // ─────────────────────────────────────────
 async function connectTradingWs() {
   if (!DERIV_TOKEN) { console.warn("[DERIV] No token — market data only"); return; }
@@ -484,9 +492,7 @@ async function connectTradingWs() {
       broadcastDash({type:"BRIDGE_STATUS",payload:{connected:true,account:derivAccountId}});
       tradingWs.send(JSON.stringify({balance:1, subscribe:1, req_id:reqId++}));
       tradingWs.send(JSON.stringify({portfolio:1, req_id:reqId++}));
-      // Global subscription to all open contract updates (new API: no loginid)
       tradingWs.send(JSON.stringify({proposal_open_contract:1, subscribe:1, req_id:reqId++}));
-      // Fetch valid multiplier ranges for every symbol
       fetchContractsFor(tradingWs);
     });
 
@@ -519,23 +525,14 @@ async function connectTradingWs() {
 }
 
 // ─────────────────────────────────────────
-//  BUILD POSITION OBJECT FROM CONTRACT DATA
-//  Works for both portfolio snapshot and proposal_open_contract stream
+//  BUILD POSITION OBJECT
 // ─────────────────────────────────────────
 function buildPosition(c) {
-  // underlying_symbol is the new API field (replaces symbol/underlying)
   const symCode = c.underlying_symbol || c.underlying || "";
   const symName = SYM_NAMES[symCode] || symCode || "Unknown";
 
-  // direction: MULTUP = BUY (Long), MULTDOWN = SELL (Short)
   const dir = (c.contract_type === "MULTUP") ? "BUY" : "SELL";
 
-  // ── STAKE ──────────────────────────────────────────────────────────────────
-  // Priority order for the real staked amount on multiplier contracts:
-  //   1. contract_parameters.amount  — most reliable (raw stake sent in proposal)
-  //   2. contract_parameters.stake   — alternate field name used by some API versions
-  //   3. c.stake                     — top-level field, present on some responses
-  //   4. c.buy_price                 — last resort fallback (includes commission)
   const stake = n(
     c.contract_parameters?.amount ??
     c.contract_parameters?.stake  ??
@@ -553,6 +550,8 @@ function buildPosition(c) {
     symbol       : symName,
     sym_code     : symCode,
     dir,
+    // "lot" in multiplier contracts = the staked amount
+    lot          : stake.toFixed(2),
     stake        : stake.toFixed(2),
     multiplier   : mult,
     exposure     : (stake * mult).toFixed(2),
@@ -599,9 +598,16 @@ function handleTradingMsg(msg) {
       const removed=positionsState.find(p=>p.ticket===c.contract_id);
       positionsState=positionsState.filter(p=>p.ticket!==c.contract_id);
       console.log(`[POS] Contract ${c.contract_id} closed — P/L: $${n(c.profit).toFixed(2)}`);
-      if (removed) broadcastDash({type:"POSITION_CLOSED",payload:{
-        ticket:c.contract_id, symbol:removed.symbol, pnl:n(c.profit),
-      }});
+      if (removed) {
+        // Update final close price before recording
+        removed.current_price = n(
+          c.current_spot || c.exit_spot || removed.current_price
+        ).toFixed(5);
+        recordHistory(removed, n(c.profit));
+        broadcastDash({type:"POSITION_CLOSED",payload:{
+          ticket:c.contract_id, symbol:removed.symbol, pnl:n(c.profit),
+        }});
+      }
     } else {
       const pos=buildPosition(c);
       const idx=positionsState.findIndex(p=>p.ticket===c.contract_id);
@@ -635,7 +641,6 @@ function handleTradingMsg(msg) {
       return;
     }
     if (!pendingInfo) {
-      // This proposal_id isn't one we sent (e.g. a late duplicate response) — ignore
       return;
     }
 
@@ -707,20 +712,15 @@ function fireTrade({symbol, direction, stake, multiplier, take_profit, stop_loss
     return;
   }
 
-  // Resolve symbol: accept display name or raw code
   const sym    = NAME_TO_SYM[symbol] || symbol;
   const amount = n(stake) || EA.stake;
 
-  // ── MULTIPLIER GUARD ────────────────────────────────────────────────────────
-  // Block the trade entirely if we don't yet have valid multiplier data for
-  // this symbol. Sending an invalid multiplier causes a silent proposal error.
   if (!SYM_MULTIPLIERS[sym]?.available?.length) {
     const reason = SYM_MULTIPLIERS[sym]?._fetched
       ? `${sym} does not support multiplier contracts`
       : `Multiplier data for ${sym} not yet loaded — try again in a moment`;
     console.warn(`[TRADE] Blocked — ${reason}`);
     broadcastDash({type:"TRADE_RESULT",payload:{ok:false,error:reason}});
-    // Trigger a re-fetch in case the first attempt failed
     if (!SYM_MULTIPLIERS[sym]?._fetched) fetchContractsFor(tradingWs);
     return;
   }
@@ -732,7 +732,7 @@ function fireTrade({symbol, direction, stake, multiplier, take_profit, stop_loss
     return;
   }
 
-  const currency     = accountState?.currency || "USD";
+  const currency      = accountState?.currency || "USD";
   const contract_type = direction === "BUY" ? "MULTUP" : "MULTDOWN";
 
   console.log(
@@ -742,7 +742,6 @@ function fireTrade({symbol, direction, stake, multiplier, take_profit, stop_loss
     `available=[${SYM_MULTIPLIERS[sym].available.join(",")}]`
   );
 
-  // Build optional limit_order for TP/SL
   const limit_order = {};
   const tp = n(take_profit);
   const sl = n(stop_loss);
@@ -752,7 +751,6 @@ function fireTrade({symbol, direction, stake, multiplier, take_profit, stop_loss
   const id = reqId++;
   pendingProposals[id] = {sym, amount, mult, direction, contract_type};
 
-  // Multiplier proposal — no duration/duration_unit (multipliers have no fixed expiry)
   const proposal = {
     proposal          : 1,
     req_id            : id,
@@ -816,6 +814,9 @@ dashWss.on("connection",ws=>{
     }}));
   if (allAccounts.length)
     ws.send(JSON.stringify({type:"ACCOUNTS_LIST",payload:{accounts:allAccounts,current:derivAccountId}}));
+  // Send existing history to newly connected clients
+  if (tradeHistory.length)
+    ws.send(JSON.stringify({type:"HISTORY_UPDATE",payload:tradeHistory}));
 
   ws.on("message",raw=>{
     let msg; try{msg=JSON.parse(raw);}catch{return;}
@@ -840,12 +841,14 @@ dashWss.on("connection",ws=>{
       case "GET_ACCOUNTS":
         ws.send(JSON.stringify({type:"ACCOUNTS_LIST",payload:{accounts:allAccounts,current:derivAccountId}}));
         break;
+      case "GET_HISTORY":
+        ws.send(JSON.stringify({type:"HISTORY_UPDATE",payload:tradeHistory}));
+        break;
       case "SWITCH_ACCOUNT":
         if (!payload.account_id) return;
         console.log("[DASH] Switch to:",payload.account_id);
         derivAccountId=payload.account_id;
         accountState=null; positionsState=[];
-        // Reset multiplier data so it re-fetches for the new account context
         SYMBOLS.forEach(s => SYM_MULTIPLIERS[s] = { min: 50, available: [] });
         contractsFetched = false;
         if (tradingWs) tradingWs.close();
