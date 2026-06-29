@@ -93,7 +93,7 @@ let EA = {
 //  PER-SYMBOL MULTIPLIER STORE
 //  Populated at runtime via contracts_for calls on the trading WS.
 //  Each entry: { min, available: [50, 100, 200, ...] }
-//  Falls back to [50] until Deriv responds.
+//  Falls back to [] until Deriv responds — trades are blocked until loaded.
 // ─────────────────────────────────────────
 const SYM_MULTIPLIERS = {};
 SYMBOLS.forEach(s => SYM_MULTIPLIERS[s] = { min: 50, available: [] });
@@ -121,7 +121,13 @@ function handleContractsFor(msg, sym) {
     console.warn(`[CONTRACTS] ${sym} error: ${msg.error.message}`);
     return;
   }
+
   const available = msg.contracts_for?.available || [];
+
+  // Log all contract types returned so we can see what Deriv actually supports
+  const allTypes = [...new Set(available.map(c => c.contract_type))];
+  console.log(`[CONTRACTS] ${sym} raw contract types: ${allTypes.join(", ") || "(none)"}`);
+
   const multContracts = available.filter(c =>
     c.contract_type === "MULTUP" || c.contract_type === "MULTDOWN"
   );
@@ -133,15 +139,27 @@ function handleContractsFor(msg, sym) {
     SYM_MULTIPLIERS[sym] = { min: allMults[0], available: allMults };
     console.log(`[CONTRACTS] ${sym} → multipliers: [${allMults.join(", ")}]`);
   } else {
-    // Symbol returned no multiplier contracts — keep fallback
-    console.warn(`[CONTRACTS] ${sym} → no MULTUP/MULTDOWN contracts found, keeping fallback`);
+    // Symbol returned no multiplier contracts — keep empty so trades are blocked
+    console.warn(`[CONTRACTS] ${sym} → no MULTUP/MULTDOWN contracts found`);
   }
 
-  // Check if all symbols are resolved
-  const done = SYMBOLS.every(s => SYM_MULTIPLIERS[s].available.length > 0);
-  if (done && !contractsFetched) {
+  // Check if all symbols are resolved (have data, even if empty)
+  const done = SYMBOLS.every(s => {
+    const d = SYM_MULTIPLIERS[s];
+    // Consider resolved if we got a response (available may be empty for unsupported syms)
+    return d._fetched || d.available.length > 0;
+  });
+
+  // Mark this symbol as fetched regardless of result
+  SYM_MULTIPLIERS[sym]._fetched = true;
+
+  const allFetched = SYMBOLS.every(s => SYM_MULTIPLIERS[s]._fetched);
+  if (allFetched && !contractsFetched) {
     contractsFetched = true;
     console.log("[CONTRACTS] All symbol multipliers loaded ✓");
+    console.log("[CONTRACTS] Summary:", SYMBOLS.map(s =>
+      `${s}:[${SYM_MULTIPLIERS[s].available.join(",")||"none"}]`
+    ).join(" "));
     broadcastDash({ type: "SYM_MULTIPLIERS", payload: SYM_MULTIPLIERS });
   }
 }
@@ -149,19 +167,19 @@ function handleContractsFor(msg, sym) {
 // Resolve the best multiplier for a symbol:
 //   - If caller passed a value and it's valid for this symbol → use it
 //   - Otherwise → use the symbol's minimum (lowest accepted value)
-//   - If symbol data not yet loaded → use EA.multiplier as temporary fallback
+//   - Returns null if symbol has no known multipliers (caller should block trade)
 function resolveMultiplier(sym, requested) {
   const data = SYM_MULTIPLIERS[sym];
   const req  = parseInt(requested) || 0;
 
   if (data?.available?.length) {
-    // Use requested if valid, else fall back to symbol minimum
-    return data.available.includes(req) ? req : data.min;
+    // Use requested if valid for this symbol, else fall back to symbol minimum
+    const resolved = data.available.includes(req) ? req : data.min;
+    return resolved;
   }
 
-  // Data not yet fetched — use EA default and warn
-  console.warn(`[CONTRACTS] ${sym} multiplier data not yet loaded, using EA default ${EA.multiplier}`);
-  return parseInt(EA.multiplier) || 50;
+  // Data not yet fetched or symbol has no multiplier contracts
+  return null;
 }
 
 // ─────────────────────────────────────────
@@ -506,23 +524,8 @@ async function connectTradingWs() {
 // ─────────────────────────────────────────
 //  BUILD POSITION OBJECT FROM CONTRACT DATA
 //  Works for both portfolio snapshot and proposal_open_contract stream
-//
-//  FIX: For multiplier contracts, the actual staked amount lives in
-//  contract_parameters.amount (or .stake), NOT in buy_price.
-//  buy_price = stake + commission, so it will always read slightly
-//  higher than what the user chose. We fall back to buy_price only
-//  if the parameters field is absent (older API responses).
 // ─────────────────────────────────────────
 function buildPosition(c) {
-  // Log raw fields on first build to help diagnose stake field location
-  // Remove this block once confirmed working in your environment
-  console.log("[BUILD_POS] raw stake fields:", JSON.stringify({
-    buy_price           : c.buy_price,
-    stake               : c.stake,
-    multiplier          : c.multiplier,
-    contract_parameters : c.contract_parameters,
-  }));
-
   // underlying_symbol is the new API field (replaces symbol/underlying)
   const symCode = c.underlying_symbol || c.underlying || "";
   const symName = SYM_NAMES[symCode] || symCode || "Unknown";
@@ -530,7 +533,7 @@ function buildPosition(c) {
   // direction: MULTUP = BUY (Long), MULTDOWN = SELL (Short)
   const dir = (c.contract_type === "MULTUP") ? "BUY" : "SELL";
 
-  // ── STAKE FIX ──────────────────────────────────────────────────────────────
+  // ── STAKE ──────────────────────────────────────────────────────────────────
   // Priority order for the real staked amount on multiplier contracts:
   //   1. contract_parameters.amount  — most reliable (raw stake sent in proposal)
   //   2. contract_parameters.stake   — alternate field name used by some API versions
@@ -543,31 +546,24 @@ function buildPosition(c) {
     c.buy_price
   );
 
-  // multiplier field is present on multiplier contracts
-  const mult = n(c.multiplier, 0);
-
-  // entry_spot = actual market price at open (string|number)
-  const entrySpot = n(c.entry_spot || c.entry_tick || c.buy_price);
-
-  // current_spot = live market price (string|number in new API)
+  const mult        = n(c.multiplier, 0);
+  const entrySpot   = n(c.entry_spot || c.entry_tick || c.buy_price);
   const currentSpot = n(c.current_spot || c.entry_spot || c.buy_price);
-
-  // profit = current P/L (string|number in new API — use n() to parse safely)
-  const pnl = parseFloat(n(c.profit).toFixed(2));
+  const pnl         = parseFloat(n(c.profit).toFixed(2));
 
   return {
     ticket       : c.contract_id,
     symbol       : symName,
     sym_code     : symCode,
     dir,
-    stake        : stake.toFixed(2),          // the actual USD staked
-    multiplier   : mult,                       // e.g. 10, 50, 100
-    exposure     : (stake * mult).toFixed(2),  // effective market exposure
+    stake        : stake.toFixed(2),
+    multiplier   : mult,
+    exposure     : (stake * mult).toFixed(2),
     open_price   : entrySpot.toFixed(5),
     current_price: currentSpot.toFixed(5),
     pnl,
     contract_type: c.contract_type || "",
-    expiry       : c.date_expiry || null,      // null for multipliers (no expiry)
+    expiry       : c.date_expiry || null,
   };
 }
 
@@ -592,7 +588,6 @@ function handleTradingMsg(msg) {
 
   // ── PORTFOLIO SNAPSHOT ──────────────────────────────────────────────────────
   } else if (type==="portfolio") {
-    // New API: underlying_symbol field (not symbol)
     const contracts=msg.portfolio?.contracts||[];
     positionsState=contracts.map(buildPosition);
     console.log(`[PORTFOLIO] ${positionsState.length} open position(s)`);
@@ -604,7 +599,6 @@ function handleTradingMsg(msg) {
     if (!c||!c.contract_id) return;
 
     if (c.is_sold) {
-      // Contract closed (manual sell, stop-out, or take-profit hit)
       const removed=positionsState.find(p=>p.ticket===c.contract_id);
       positionsState=positionsState.filter(p=>p.ticket!==c.contract_id);
       console.log(`[POS] Contract ${c.contract_id} closed — P/L: $${n(c.profit).toFixed(2)}`);
@@ -629,22 +623,28 @@ function handleTradingMsg(msg) {
   // ── PROPOSAL RESPONSE ───────────────────────────────────────────────────────
   } else if (type==="proposal") {
     if (msg.error) {
-      console.error("[TRADE] Proposal error:",msg.error.message);
+      console.error("[TRADE] Proposal error:",msg.error.message,"| code:",msg.error.code);
       broadcastDash({type:"TRADE_RESULT",payload:{ok:false,error:msg.error.message}});
       delete pendingProposals[msg.req_id];
       return;
     }
 
     const proposal_id = msg.proposal?.id;
-    // New API: ask_price is string|number
     const ask_price   = n(msg.proposal?.ask_price);
     const pendingInfo = pendingProposals[msg.req_id];
-    if (!proposal_id||!pendingInfo) return;
-    delete pendingProposals[msg.req_id];
 
+    if (!proposal_id) {
+      console.warn("[TRADE] Proposal response missing id — msg:", JSON.stringify(msg));
+      return;
+    }
+    if (!pendingInfo) {
+      // This proposal_id isn't one we sent (e.g. a late duplicate response) — ignore
+      return;
+    }
+
+    delete pendingProposals[msg.req_id];
     console.log(`[TRADE] Proposal ${proposal_id} ask=$${ask_price} — buying…`);
 
-    // New API: buy — no loginid field
     tradingWs.send(JSON.stringify({
       buy    : proposal_id,
       price  : ask_price,
@@ -654,10 +654,10 @@ function handleTradingMsg(msg) {
   // ── BUY RESPONSE ────────────────────────────────────────────────────────────
   } else if (type==="buy") {
     if (msg.error) {
+      console.error("[TRADE] Buy error:",msg.error.message,"| code:",msg.error.code);
       broadcastDash({type:"TRADE_RESULT",payload:{ok:false,error:msg.error.message}});
       return;
     }
-    // New API: buy object always present on success
     const b          = msg.buy;
     const contractId = b?.contract_id;
     const buyPrice   = n(b?.buy_price);
@@ -665,14 +665,12 @@ function handleTradingMsg(msg) {
     broadcastDash({type:"TRADE_RESULT",payload:{ok:true,contract_id:contractId,price:buyPrice}});
     console.log(`[TRADE] Bought — contract ${contractId} stake=$${buyPrice}`);
 
-    // Subscribe specifically to this contract for immediate position display
     if (contractId&&tradingWs?.readyState===WebSocket.OPEN) {
       tradingWs.send(JSON.stringify({
         proposal_open_contract:1, contract_id:contractId, subscribe:1, req_id:reqId++,
       }));
     }
 
-    // Belt-and-suspenders portfolio refresh after short delay
     setTimeout(()=>{
       if (tradingWs?.readyState===WebSocket.OPEN)
         tradingWs.send(JSON.stringify({portfolio:1,req_id:reqId++}));
@@ -681,6 +679,7 @@ function handleTradingMsg(msg) {
   // ── SELL RESPONSE ───────────────────────────────────────────────────────────
   } else if (type==="sell") {
     if (msg.error) {
+      console.error("[TRADE] Sell error:",msg.error.message,"| code:",msg.error.code);
       broadcastDash({type:"CLOSE_RESULT",payload:{ok:false,error:msg.error.message}});
     } else {
       const sold_for=n(msg.sell?.sold_for);
@@ -705,38 +704,58 @@ function tradingSend(obj) {
 //  TRADE EXECUTION  — MULTIPLIER CONTRACTS
 // ─────────────────────────────────────────
 function fireTrade({symbol, direction, stake, multiplier, take_profit, stop_loss}) {
-  if (!tradingWsReady||!tradingWs) return;
+  if (!tradingWsReady || !tradingWs) {
+    console.warn("[TRADE] Blocked — trading WS not ready");
+    broadcastDash({type:"TRADE_RESULT",payload:{ok:false,error:"Trading not connected. Check DERIV_TOKEN."}});
+    return;
+  }
 
   // Resolve symbol: accept display name or raw code
-  const sym            = NAME_TO_SYM[symbol] || symbol;
-  const amount         = n(stake) || EA.stake;
+  const sym    = NAME_TO_SYM[symbol] || symbol;
+  const amount = n(stake) || EA.stake;
 
-  // Use per-symbol minimum multiplier if caller didn't specify one,
-  // or if the specified value isn't in the accepted range for this symbol.
-  const symMults       = SYM_MULTIPLIERS[sym];
-  const requestedMult  = parseInt(multiplier || EA.multiplier) || 0;
-  const mult           = resolveMultiplier(sym, multiplier || EA.multiplier);
-  const currency       = accountState?.currency || "USD";
+  // ── MULTIPLIER GUARD ────────────────────────────────────────────────────────
+  // Block the trade entirely if we don't yet have valid multiplier data for
+  // this symbol. Sending an invalid multiplier causes a silent proposal error.
+  if (!SYM_MULTIPLIERS[sym]?.available?.length) {
+    const reason = SYM_MULTIPLIERS[sym]?._fetched
+      ? `${sym} does not support multiplier contracts`
+      : `Multiplier data for ${sym} not yet loaded — try again in a moment`;
+    console.warn(`[TRADE] Blocked — ${reason}`);
+    broadcastDash({type:"TRADE_RESULT",payload:{ok:false,error:reason}});
+    // Trigger a re-fetch in case the first attempt failed
+    if (!SYM_MULTIPLIERS[sym]?._fetched) fetchContractsFor(tradingWs);
+    return;
+  }
 
-  // MULTUP = Long (Buy), MULTDOWN = Short (Sell)
-  const contract_type  = direction==="BUY" ? "MULTUP" : "MULTDOWN";
+  const mult = resolveMultiplier(sym, multiplier || EA.multiplier);
+  if (mult === null) {
+    console.warn(`[TRADE] Blocked — could not resolve multiplier for ${sym}`);
+    broadcastDash({type:"TRADE_RESULT",payload:{ok:false,error:`No valid multiplier for ${sym}`}});
+    return;
+  }
 
-  // Build limit_order for TP/SL (optional)
+  const currency     = accountState?.currency || "USD";
+  const contract_type = direction === "BUY" ? "MULTUP" : "MULTDOWN";
+
+  console.log(
+    `[TRADE] Resolved multiplier for ${sym}:`,
+    `requested=${multiplier || EA.multiplier},`,
+    `using=${mult},`,
+    `available=[${SYM_MULTIPLIERS[sym].available.join(",")}]`
+  );
+
+  // Build optional limit_order for TP/SL
   const limit_order = {};
   const tp = n(take_profit);
   const sl = n(stop_loss);
   if (tp > 0) limit_order.take_profit = tp;
   if (sl > 0) limit_order.stop_loss   = sl;
 
-  const id=reqId++;
-  pendingProposals[id]={sym, amount, mult, direction, contract_type};
+  const id = reqId++;
+  pendingProposals[id] = {sym, amount, mult, direction, contract_type};
 
-  // Multiplier proposal:
-  //   - contract_type: MULTUP or MULTDOWN
-  //   - multiplier: the leverage factor
-  //   - NO duration / duration_unit (multipliers have no fixed expiry)
-  //   - underlying_symbol: new API field name
-  //   - limit_order: optional TP/SL object
+  // Multiplier proposal — no duration/duration_unit (multipliers have no fixed expiry)
   const proposal = {
     proposal          : 1,
     req_id            : id,
@@ -748,10 +767,15 @@ function fireTrade({symbol, direction, stake, multiplier, take_profit, stop_loss
     multiplier        : mult,
   };
 
-  if (Object.keys(limit_order).length) proposal.limit_order=limit_order;
+  if (Object.keys(limit_order).length) proposal.limit_order = limit_order;
 
   tradingWs.send(JSON.stringify(proposal));
-  console.log(`[TRADE] MULT proposal — ${direction} ${sym} stake=$${amount} x${mult}${tp?` TP=$${tp}`:''}${sl?` SL=$${sl}`:''}`);
+  console.log(
+    `[TRADE] MULT proposal — ${direction} ${sym}`,
+    `stake=$${amount} x${mult}`,
+    tp ? `TP=$${tp}` : "",
+    sl ? `SL=$${sl}` : ""
+  );
 }
 
 function closePosition(contractId) {
@@ -824,6 +848,9 @@ dashWss.on("connection",ws=>{
         console.log("[DASH] Switch to:",payload.account_id);
         derivAccountId=payload.account_id;
         accountState=null; positionsState=[];
+        // Reset multiplier data so it re-fetches for the new account context
+        SYMBOLS.forEach(s => SYM_MULTIPLIERS[s] = { min: 50, available: [] });
+        contractsFetched = false;
         if (tradingWs) tradingWs.close();
         broadcastDash({type:"BRIDGE_STATUS",payload:{connected:false}});
         broadcastDash({type:"ACCOUNT_SWITCHED",payload:{account_id:payload.account_id}});
@@ -833,6 +860,8 @@ dashWss.on("connection",ws=>{
         if (!payload.token) return;
         DERIV_TOKEN=payload.token;
         derivAccountId=null; allAccounts=[]; accountState=null; positionsState=[];
+        SYMBOLS.forEach(s => SYM_MULTIPLIERS[s] = { min: 50, available: [] });
+        contractsFetched = false;
         if (tradingWs) tradingWs.close();
         broadcastDash({type:"BRIDGE_STATUS",payload:{connected:false}});
         broadcastDash({type:"LOGGED_OUT",payload:{}});
@@ -841,6 +870,8 @@ dashWss.on("connection",ws=>{
       case "LOGOUT":
         DERIV_TOKEN="";
         derivAccountId=null; allAccounts=[]; accountState=null; positionsState=[];
+        SYMBOLS.forEach(s => SYM_MULTIPLIERS[s] = { min: 50, available: [] });
+        contractsFetched = false;
         if (tradingWs) { tradingWs.close(); tradingWs=null; }
         tradingWsReady=false;
         broadcastDash({type:"BRIDGE_STATUS",payload:{connected:false}});
